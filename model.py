@@ -37,7 +37,7 @@ def create_LSTM_model(input_shape=(3000, 6)):
         tf.keras.layers.Dense(32, activation='swish',
                               kernel_regularizer=tf.keras.regularizers.l1_l2(1e-4, 1e-3)),
         tf.keras.layers.Dropout(0.3),
-        tf.keras.layers.Dense(3, activation='softmax',
+        tf.keras.layers.Dense(5, activation='softmax',
                               kernel_regularizer=tf.keras.regularizers.l2(1e-4))
     ])
 
@@ -57,7 +57,7 @@ def create_embedded_model(input_shape=(3000, 6)):
         tf.keras.layers.GlobalAvgPool1D(),
 
         # 输出层
-        tf.keras.layers.Dense(3, activation='softmax')
+        tf.keras.layers.Dense(5, activation='softmax')
     ])
     return model
 
@@ -67,6 +67,7 @@ def create_simple_model(input_shape=(3000,6)):
         tf.keras.layers.MaxPooling1D(3),
         tf.keras.layers.Conv1D(32, 5, activation='relu'),
         tf.keras.layers.GlobalAvgPool1D(),
-        tf.keras.layers.Dense(3, activation='softmax')
+        # 修改输出层为5个单元
+        tf.keras.layers.Dense(5, activation='softmax')
     ])
     return model

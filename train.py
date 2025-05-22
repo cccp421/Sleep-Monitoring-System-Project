@@ -34,15 +34,15 @@ def main():
         classes=classes,
         y=y_train
     )
-    print(f"\n类别权重数组: {class_weights} (顺序对应类别0,1,2)")
+    print(f"\n类别权重数组: {class_weights} (顺序对应类别0-4)")
 
     # 将权重转换为Tensor张量
     class_weights_tensor = tf.constant(class_weights, dtype=tf.float32)
 
     # 优化后的模型配置
     # model = create_LSTM_model(input_shape=(3000, 6))
-    model = create_embedded_model(input_shape=(3000, 6))
-    # model = create_simple_model(input_shape=(3000, 6))
+    # model = create_embedded_model(input_shape=(3000, 6))
+    model = create_simple_model(input_shape=(3000, 6))
 
     # 优化器
     optimizer = tf.keras.optimizers.Adam(
@@ -91,7 +91,7 @@ def main():
     callbacks = [
         tf.keras.callbacks.EarlyStopping(
             monitor='val_top2_accuracy',
-            patience=20,
+            patience=100,
             mode='max',
             restore_best_weights=True
         ),

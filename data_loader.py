@@ -18,7 +18,17 @@ def load_and_process(csv_path):
         return np.array([]), np.array([])  # 跳过不足的数据
 
     features = df[['ACC_X', 'ACC_Y', 'ACC_Z', 'TEMP', 'HR', 'SAO2']].values.astype(np.float32)
-    labels = df['Sleep_Stage'].map({'W': 0, 'N': 1, 'R': 2}).values
+
+    # 标签映射为3个类别
+    # labels = df['Sleep_Stage'].map({'W': 0, 'N': 1, 'R': 2}).values
+
+    # 更新标签映射为5个类别
+    stage_mapping = {'W': 0, 'N1': 1, 'N2': 2, 'N3': 3, 'R': 4}
+    labels = df['Sleep_Stage'].map(stage_mapping).values
+
+    # 检查是否有未映射的标签
+    if np.isnan(labels).any():
+        raise ValueError("数据中包含未定义的睡眠阶段标签")
 
     X, y = [], []
     for i in range(0, len(features) - window_size + 1, window_size // 2):
@@ -30,10 +40,10 @@ def load_and_process(csv_path):
 
         # 确保长度为3000
         if augmented.shape[0] != window_size:
-            augmented = augmented[:window_size]  # 安全截断
+            augmented = augmented[:window_size]
 
-        # 取标签众数
-        label_counts = np.bincount(window_labels)
+        # 取标签众数（使用bincount的minlength确保维度）
+        label_counts = np.bincount(window_labels, minlength=5)
         most_common_label = np.argmax(label_counts)
 
         X.append(augmented)
@@ -101,23 +111,29 @@ def load_prepared_data(save_path):
 
 
 def check_class_distribution(y):
-    """数据权重分布"""
-    class_counts = np.bincount(y)
-    print(f"\n类别分布:\nW: {class_counts[0]}\nN: {class_counts[1]}\nR: {class_counts[2]}")
-    print(f"类别权重建议: {len(y)/ (3 * class_counts)}")
+    """数据权重分布（支持5个类别）"""
+    class_counts = np.bincount(y, minlength=5)
+    print("\n类别分布:")
+    print(
+        f"W: {class_counts[0]}\nN1: {class_counts[1]}\nN2: {class_counts[2]}\nN3: {class_counts[3]}\nR: {class_counts[4]}")
+    print(f"类别权重建议: {len(y) / (5 * class_counts + 1e-7)}")  # 添加微小值防止除零
 
 
 def data_diagnosis(X, y):
-    """数据质量诊断"""
+    """数据质量诊断（支持5个类别）"""
     # 检查NaN值
     print(f"包含NaN的样本数: {np.isnan(X).any(axis=(1, 2)).sum()}")
 
     # 检查标签分布
-    class_counts = np.bincount(y)
-    print(f"类别分布 - W: {class_counts[0]} | N: {class_counts[1]} | R: {class_counts[2]}")
+    class_counts = np.bincount(y, minlength=5)
+    print("类别分布:")
+    print(
+        f"W: {class_counts[0]} | N1: {class_counts[1]} | N2: {class_counts[2]} | N3: {class_counts[3]} | R: {class_counts[4]}")
 
     # 检查特征范围
-    print(f"特征统计: \n均值={X.mean(axis=(0, 1))}\n标准差={X.std(axis=(0, 1))}")
+    print("特征统计:")
+    print(f"均值={X.mean(axis=(0, 1))}")
+    print(f"标准差={X.std(axis=(0, 1))}")
 
 
 def augment_window(window):
