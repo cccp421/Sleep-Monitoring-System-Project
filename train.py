@@ -83,26 +83,25 @@ def main():
     model.compile(
         optimizer=optimizer,
         loss=focal_loss(gamma=2),  # 使用gamma=2
-        metrics=['accuracy',
-                 tf.keras.metrics.SparseTopKCategoricalAccuracy(k=2, name='top2_accuracy')]
+        metrics=['accuracy']
     )
 
     # 增强的回调设置
     callbacks = [
         tf.keras.callbacks.EarlyStopping(
-            monitor='val_top2_accuracy',
-            patience=100,
+            monitor='val_accuracy',
+            patience=50,
             mode='max',
             restore_best_weights=True
         ),
         tf.keras.callbacks.ModelCheckpoint(
             'best_model.h5',
-            monitor='val_top2_accuracy',
+            monitor='val_accuracy',
             save_best_only=True,
             mode='max'
         ),
         tf.keras.callbacks.ReduceLROnPlateau(
-            monitor='val_top2_accuracy',
+            monitor='val_accuracy',
             factor=0.5,
             patience=5,
             mode='max'

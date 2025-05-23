@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 import re  # 新增正则表达式库
 
@@ -20,6 +21,7 @@ REQUIRED_COLS = [  # 需要保留的字段
     'TEMP',
     'HR',
     'SAO2',
+    # 'ECG',
     'Sleep_Stage'
 ]
 
@@ -54,12 +56,32 @@ def process_sleep_stage_all(df):
     df = df[df['Sleep_Stage'].isin(allowed_stages)]  # 过滤无效状态（如P）
     return df
 
+
+def clean_data(df):
+    """执行数据清洗操作"""
+    # 处理无穷值
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    # 删除高缺失值特征（列缺失超过2000条）
+    missing_counts = df.isna().sum()
+    columns_to_drop = missing_counts[missing_counts > 2000].index
+    df = df.drop(columns=columns_to_drop)
+
+    # 删除包含任何NaN的行
+    df = df.dropna(axis=0, how='any')
+
+    return df
+
 def process_file(input_path, output_filename):
     """处理单个数据文件"""
     try:
         df = pd.read_csv(input_path, usecols=REQUIRED_COLS)
         # df = process_sleep_stage(df)
         df = process_sleep_stage_all(df)
+        df = clean_data(df)
+        if df.empty:
+            print(f"警告：文件 {input_path} 处理后无有效数据")
+            return False
         df.to_csv(output_filename, index=False)
         return True
     except Exception as e:
