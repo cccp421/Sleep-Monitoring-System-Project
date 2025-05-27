@@ -19,9 +19,6 @@ def load_and_process(csv_path):
 
     features = df[['ACC_X', 'ACC_Y', 'ACC_Z', 'TEMP', 'HR', 'SAO2']].values.astype(np.float32)
 
-    # 标签映射为3个类别
-    # labels = df['Sleep_Stage'].map({'W': 0, 'N': 1, 'R': 2}).values
-
     # 更新标签映射为5个类别
     stage_mapping = {'W': 0, 'N1': 1, 'N2': 2, 'N3': 3, 'R': 4}
     labels = df['Sleep_Stage'].map(stage_mapping).values
@@ -53,20 +50,20 @@ def load_and_process(csv_path):
 
 
 def prepare_datasets(data_dir, save_path):
-    """处理数据集并保存为单个文件"""
+    """处理数据集并保存为单个文件（8:2划分）"""
     # 获取所有CSV文件
     all_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.csv')]
 
-    # 按受试者划分数据集
-    train_files, temp_files = train_test_split(all_files, test_size=0.2, random_state=42)
-    val_files, test_files = train_test_split(temp_files, test_size=0.5, random_state=42)
+    # 按受试者划分数据集（8:2）
+    train_files, test_files = train_test_split(all_files, test_size=0.2, random_state=42)
 
-    # 计算标准化参数
+    # 计算标准化参数（仅使用训练集）
     print("正在计算标准化参数...")
     all_train_features = []
     for f in train_files:
         X, _ = load_and_process(f)
-        all_train_features.append(X.reshape(-1, 6))
+        if X.size > 0:
+            all_train_features.append(X.reshape(-1, 6))
     scaler = StandardScaler().fit(np.concatenate(all_train_features))
 
     # 封装处理函数
@@ -74,16 +71,15 @@ def prepare_datasets(data_dir, save_path):
         all_X, all_y = [], []
         for f in files:
             X, y = load_and_process(f)
-            X = scaler.transform(X.reshape(-1, 6)).reshape(X.shape)
-            all_X.append(X)
-            all_y.append(y)
+            if X.size > 0:
+                X = scaler.transform(X.reshape(-1, 6)).reshape(X.shape)
+                all_X.append(X)
+                all_y.append(y)
         return np.concatenate(all_X), np.concatenate(all_y)
 
     # 处理各数据集
     print("正在处理训练集...")
     X_train, y_train = process_files(train_files)
-    print("正在处理验证集...")
-    X_val, y_val = process_files(val_files)
     print("正在处理测试集...")
     X_test, y_test = process_files(test_files)
 
@@ -91,20 +87,17 @@ def prepare_datasets(data_dir, save_path):
     np.savez_compressed(
         save_path,
         X_train=X_train, y_train=y_train,
-        X_val=X_val, y_val=y_val,
         X_test=X_test, y_test=y_test
     )
     joblib.dump(scaler, save_path.replace('.npz', '_scaler.pkl'))
-    return (X_train, y_train), (X_val, y_val), (X_test, y_test)
-
+    return (X_train, y_train), (X_test, y_test)
 
 def load_prepared_data(save_path):
-    """加载已处理的数据"""
+    """加载已处理的数据（8:2版本）"""
     data = np.load(save_path)
     scaler = joblib.load(save_path.replace('.npz', '_scaler.pkl'))
     return (
         (data['X_train'], data['y_train']),
-        (data['X_val'], data['y_val']),
         (data['X_test'], data['y_test']),
         scaler
     )

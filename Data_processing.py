@@ -4,14 +4,6 @@ import numpy as np
 from tqdm import tqdm
 import re  # 新增正则表达式库
 
-'''
-Data processing.py 数据预处理文件
-
-1. 保留 'TIMESTAMP', 'ACC_X', 'ACC_Y', 'ACC_Z', 'TEMP', 'HR', 'SAO2', 'Sleep_Stage';
-2. 合并 'Sleep_Stage' 状态 'N1/2/3' 为 'N', 清除状态 'P';
-
-'''
-
 # 配置参数
 INPUT_DIR = "E:/DREAMT base/DREAMT-main/data_100Hz"  # 原始数据目录
 OUTPUT_DIR = "E:/DREAMT base/DREAMT-main/data_100Hz_processed"  # 处理结果目录
@@ -35,20 +27,6 @@ def extract_participant_id(filename):
     if match:
         return f"S{match.group(1)}"
     raise ValueError(f"文件名 {filename} 中未找到参与者编号")
-
-
-def process_sleep_stage(df):
-    """处理睡眠阶段标签"""
-    stage_mapping = {
-        'W': 'W',
-        'N1': 'N',
-        'N2': 'N',
-        'N3': 'N',
-        'R': 'R'
-    }
-    df = df[df['Sleep_Stage'].isin(stage_mapping.keys())]
-    df['Sleep_Stage'] = df['Sleep_Stage'].map(stage_mapping)
-    return df.dropna(subset=['Sleep_Stage']).query("Sleep_Stage in ['W', 'N', 'R']")
 
 def process_sleep_stage_all(df):
     """处理睡眠阶段标签（保留N1/N2/N3独立状态，清除P）"""
