@@ -4,8 +4,65 @@ import os
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import tensorflow as tf
+from sklearn.model_selection import GroupKFold
 
+def get_patient_id(file_path):
+    """从文件名中提取患者ID（假设文件名为patientID_xxx.csv格式）"""
+    return os.path.basename(file_path).split('_')[0]
+
+def generate_kfold_splits(data_dir, n_splits=5):
+    """生成按患者分组的K折划分"""
+    all_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.csv')]
+    patient_ids = [get_patient_id(f) for f in all_files]
+
+    # 使用GroupKFold确保同一患者的数据在同一fold
+    gkf = GroupKFold(n_splits=n_splits)
+    return [(train_idx, val_idx)
+            for train_idx, val_idx in gkf.split(all_files, groups=patient_ids)]
+
+def prepare_single_fold(train_files, val_files):
+    """处理单个fold的数据"""
+    # 计算训练集的标准化参数
+    scaler = StandardScaler()
+    all_train_features = []
+
+    # 先遍历所有训练文件获取特征
+    for f in train_files:
+        X, _ = load_and_process(f)
+        if X.size > 0:
+            all_train_features.append(X.reshape(-1, 3))
+
+    # 合并所有训练特征进行标准化
+    if all_train_features:
+        scaler.fit(np.concatenate(all_train_features))
+    else:
+        raise ValueError("No valid training data found")
+
+    # 处理训练集
+    X_train, y_train = [], []
+    for f in train_files:
+        X, y = load_and_process(f)
+        if X.size > 0:
+            X = scaler.transform(X.reshape(-1, 3)).reshape(X.shape)
+            X_train.append(X)
+            y_train.append(y)
+
+    # 处理验证集
+    X_val, y_val = [], []
+    for f in val_files:
+        X, y = load_and_process(f)
+        if X.size > 0:
+            X = scaler.transform(X.reshape(-1, 3)).reshape(X.shape)
+            X_val.append(X)
+            y_val.append(y)
+
+    return (
+        np.concatenate(X_train) if X_train else np.array([]),
+        np.concatenate(y_train) if y_train else np.array([]),
+        np.concatenate(X_val) if X_val else np.array([]),
+        np.concatenate(y_val) if y_val else np.array([]),
+        scaler
+    )
 
 def load_and_process(csv_path):
     """加载单个CSV文件并进行窗口化处理（特征维度减少为3）"""

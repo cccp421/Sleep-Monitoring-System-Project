@@ -1,116 +1,99 @@
+# train.py 修改内容
 import tensorflow as tf
 import numpy as np
 import os
 from sklearn.utils import class_weight
-from data_loader import load_prepared_data, data_diagnosis
-from model import create_LSTM_model, create_embedded_model, create_simple_model
-import joblib
+from data_loader import (load_and_process, generate_kfold_splits,
+                         prepare_single_fold, data_diagnosis, get_patient_id)
+from model import create_simple_model
 
 
 def main():
     # 配置路径
     RAW_DATA_DIR = "E:/DREAMT base/DREAMT-main/data_100Hz_processed"
-    PROCESSED_PATH = "E:/DREAMT base/DREAMT-main/data_100Hz_processed/processed_data.npz"
+    N_FOLDS = 5
 
-    # 自动数据预处理
-    if not os.path.exists(PROCESSED_PATH):
-        print("首次运行，正在处理数据...")
-        from data_loader import prepare_datasets
-        (X_train, y_train), (X_test, y_test) = prepare_datasets(RAW_DATA_DIR, PROCESSED_PATH)
-        scaler = joblib.load(PROCESSED_PATH.replace('.npz', '_scaler.pkl'))
-    else:
-        print("加载已处理数据...")
-        (X_train, y_train), (X_test, y_test), scaler = load_prepared_data(PROCESSED_PATH)
+    # 获取所有文件路径
+    all_files = [os.path.join(RAW_DATA_DIR, f)
+                 for f in os.listdir(RAW_DATA_DIR) if f.endswith('.csv')]
 
-    # 数据质量诊断
-    print("\n训练集诊断:")
-    data_diagnosis(X_train, y_train)
-    print("\n验证集/测试集诊断:")
-    data_diagnosis(X_test, y_test)
+    # 生成K折划分
+    kfold_splits = generate_kfold_splits(RAW_DATA_DIR, N_FOLDS)
 
-    # 验证数据形状（注意新维度）
-    print(f"\n训练集形状: X{X_train.shape} y{y_train.shape}")  # 应为 (n, 3000, 3)
-    print(f"验证集/测试集形状: X{X_test.shape} y{y_test.shape}")
+    # 存储各fold结果
+    fold_results = []
 
-    # 计算类别权重
-    classes = np.unique(y_train)
-    class_weights = class_weight.compute_class_weight(
-        'balanced',
-        classes=classes,
-        y=y_train
-    )
-    print(f"\n类别权重数组: {class_weights} (顺序对应类别0-4)")
+    for fold_idx, (train_idx, val_idx) in enumerate(kfold_splits):
+        print(f"\n=== Processing Fold {fold_idx + 1}/{N_FOLDS} ===")
 
-    # 模型配置（关键修改：输入形状改为(3000, 3)）
-    model = create_simple_model(input_shape=(3000, 3))  # 原为(3000, 6)
+        # 获取当前fold的文件列表
+        train_files = [all_files[i] for i in train_idx]
+        val_files = [all_files[i] for i in val_idx]
 
-    # 优化器配置保持不变
-    optimizer = tf.keras.optimizers.Adam(
-        learning_rate=1e-3,
-        beta_1=0.9,
-        beta_2=0.999,
-        epsilon=1e-7
-    )
+        # 处理数据
+        X_train, y_train, X_val, y_val, scaler = prepare_single_fold(train_files, val_files)
 
-    # Focal Loss定义（需要调整权重维度）
-    class_weights_tensor = tf.constant(class_weights, dtype=tf.float32)
+        # 数据检查
+        print(f"\n训练集样本数: {len(X_train)}")
+        print(f"验证集样本数: {len(X_val)}")
+        data_diagnosis(X_train, y_train)
 
-    def focal_loss(gamma=2):
-        def _loss(y_true, y_pred):
+        # 处理类别不平衡
+        classes = np.unique(y_train)
+        class_weights = class_weight.compute_class_weight(
+            'balanced', classes=classes, y=y_train)
+        class_weights_dict = {i: w for i, w in enumerate(class_weights)}
+
+        # 创建模型
+        model = create_simple_model(input_shape=(3000, 3))
+
+        # 定义当前fold的focal loss
+        class_weights_tensor = tf.constant(class_weights, dtype=tf.float32)
+
+        def focal_loss(y_true, y_pred):
+            gamma = 2
             ce_loss = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
             probs = tf.math.exp(-ce_loss)
             focal_factor = tf.pow(1.0 - probs, gamma)
             weights = tf.gather(class_weights_tensor, tf.cast(y_true, tf.int32))
-            return weights * focal_factor * ce_loss
+            return tf.reduce_mean(weights * focal_factor * ce_loss)
 
-        return _loss
+        # 编译模型
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            loss=focal_loss,
+            metrics=['accuracy'],
+        )
 
-    # 模型编译
-    model.compile(
-        optimizer=optimizer,
-        loss=focal_loss(gamma=2),
-        metrics=['accuracy']
-    )
+        # 回调函数
+        callbacks = [
+            tf.keras.callbacks.EarlyStopping(
+                monitor='val_accuracy', patience=20, restore_best_weights=True),
+            tf.keras.callbacks.ModelCheckpoint(
+                f'best_model_fold{fold_idx + 1}.h5', save_best_only=True),
+            tf.keras.callbacks.CSVLogger(f'training_log_fold{fold_idx + 1}.csv')
+        ]
 
-    # 回调配置（保持监控测试集）
-    callbacks = [
-        tf.keras.callbacks.EarlyStopping(
-            monitor='val_accuracy',
-            patience=20,
-            mode='max',
-            restore_best_weights=True
-        ),
-        tf.keras.callbacks.ModelCheckpoint(
-            'best_model.h5',
-            monitor='val_accuracy',
-            save_best_only=True,
-            mode='max'
-        ),
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor='val_accuracy',
-            factor=0.5,
-            patience=5,
-            mode='max'
-        ),
-        tf.keras.callbacks.CSVLogger('training_log.csv')
-    ]
+        # 训练
+        history = model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val),
+            epochs=100,
+            batch_size=32,
+            callbacks=callbacks,
+            class_weight=class_weights_dict,
+            verbose=1
+        )
 
-    # 训练参数设置
-    print("\n[开始训练]")
-    history = model.fit(
-        X_train, y_train,
-        validation_data=(X_test, y_test),
-        epochs=100,
-        batch_size=32,
-        callbacks=callbacks,
-        verbose=1,
-        shuffle=True
-    )
+        # 记录结果
+        val_acc = max(history.history['val_accuracy'])
+        fold_results.append(val_acc)
+        print(f"Fold {fold_idx + 1} 最佳验证准确率: {val_acc:.4f}")
 
-    # 最终评估
-    print("\n[训练完成] 最佳模型已保存为 best_model.h5")
-    print("最终测试集评估结果:")
-    model.evaluate(X_test, y_test, verbose=2)
+    # 输出最终结果
+    print("\n=== 交叉验证结果 ===")
+    print(f"各fold验证准确率: {fold_results}")
+    print(f"平均验证准确率: {np.mean(fold_results):.4f} ± {np.std(fold_results):.4f}")
 
 
 if __name__ == "__main__":
