@@ -3,15 +3,17 @@ import tensorflow as tf
 import numpy as np
 import os
 from sklearn.utils import class_weight
-from data_loader import (load_and_process, generate_kfold_splits,
-                         prepare_single_fold, data_diagnosis, get_patient_id)
+from data_loader import generate_kfold_splits, prepare_single_fold, data_diagnosis, create_experiment_dir
 from model import create_simple_model
-
 
 def main():
     # 配置路径
     RAW_DATA_DIR = "E:/DREAMT base/DREAMT-main/data_100Hz_processed"
     N_FOLDS = 5
+
+    # 创建版本化目录
+    exp_dir = create_experiment_dir()
+    print(f"\n实验版本目录: {exp_dir}")
 
     # 获取所有文件路径
     all_files = [os.path.join(RAW_DATA_DIR, f)
@@ -25,6 +27,9 @@ def main():
 
     for fold_idx, (train_idx, val_idx) in enumerate(kfold_splits):
         print(f"\n=== Processing Fold {fold_idx + 1}/{N_FOLDS} ===")
+        # 创建fold专用目录
+        fold_dir = exp_dir / f"fold_{fold_idx + 1}"
+        fold_dir.mkdir()
 
         # 获取当前fold的文件列表
         train_files = [all_files[i] for i in train_idx]
@@ -70,8 +75,8 @@ def main():
             tf.keras.callbacks.EarlyStopping(
                 monitor='val_accuracy', patience=20, restore_best_weights=True),
             tf.keras.callbacks.ModelCheckpoint(
-                f'best_model_fold{fold_idx + 1}.h5', save_best_only=True),
-            tf.keras.callbacks.CSVLogger(f'training_log_fold{fold_idx + 1}.csv')
+                str(fold_dir / 'best_model.h5'), save_best_only=True),
+            tf.keras.callbacks.CSVLogger(str(fold_dir / 'training_log.csv'))
         ]
 
         # 训练

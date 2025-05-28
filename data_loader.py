@@ -5,6 +5,15 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GroupKFold
+import datetime
+from pathlib import Path
+
+def create_experiment_dir(base_dir="experiments"):
+    """创建版本化实验目录"""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    exp_dir = Path(base_dir) / f"exp_{timestamp}"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    return exp_dir
 
 def get_patient_id(file_path):
     """从文件名中提取患者ID（假设文件名为patientID_xxx.csv格式）"""
