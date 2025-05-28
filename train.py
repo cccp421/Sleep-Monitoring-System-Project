@@ -2,6 +2,7 @@
 import tensorflow as tf
 import numpy as np
 import os
+import gc
 from sklearn.utils import class_weight
 from data_loader import generate_kfold_splits, prepare_single_fold, data_diagnosis, create_experiment_dir
 from model import create_simple_model
@@ -95,6 +96,11 @@ def main():
         fold_results.append(val_acc)
         print(f"Fold {fold_idx + 1} 最佳验证准确率: {val_acc:.4f}")
 
+        # ========== 新增内存回收代码 ==========
+        del model, X_train, y_train, X_val, y_val, scaler
+        gc.collect()
+        tf.keras.backend.clear_session()
+        # ====================================
     # 输出最终结果
     print("\n=== 交叉验证结果 ===")
     print(f"各fold验证准确率: {fold_results}")
