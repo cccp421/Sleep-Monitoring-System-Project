@@ -109,13 +109,20 @@ def main():
         # 回调函数
         callbacks = [
             tf.keras.callbacks.EarlyStopping(
-                monitor='val_loss',
-                patience=3,  # 允许3个epoch没有改进
-                min_delta=0.001,  # 最小改进阈值
+                monitor='val_macro_f1',  # 监控验证集F1分数
+                mode='max',  # 分数越大越好
+                patience=5,  # 适当增加耐心值
+                min_delta=0.005,  # 最小提升阈值
+                verbose=1,
                 restore_best_weights=True
             ),
             tf.keras.callbacks.ModelCheckpoint(
-                str(fold_dir / 'best_model.h5'), save_best_only=True),
+                str(fold_dir / 'best_model.h5'),
+                monitor='val_macro_f1',  # 根据F1保存最佳模型
+                mode='max',
+                save_best_only=True,
+                verbose=1
+            ),
             tf.keras.callbacks.CSVLogger(str(fold_dir / 'training_log.csv'))
         ]
 
