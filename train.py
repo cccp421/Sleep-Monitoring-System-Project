@@ -10,7 +10,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 import pandas as pd
 import matplotlib.pyplot as plt
 from metrics import MacroPrecision, MacroRecall, MacroF1
-
+from tensorflow.keras.optimizers.schedules import CosineDecay
 
 def main():
     # 配置路径
@@ -81,10 +81,39 @@ def main():
             ]
         )
 
+        # 计算学习率调度参数
+        EPOCHS = 50  # 总训练轮次
+        BATCH_SIZE = 32
+        steps_per_epoch = len(X_train) // BATCH_SIZE
+        total_steps = steps_per_epoch * EPOCHS
+
+        # 创建余弦退火学习率调度器
+        lr_schedule = CosineDecay(
+            initial_learning_rate=3e-4,  # 初始学习率（1e-4 ~ 1e-3）
+            decay_steps=total_steps,
+            alpha=1e-5  # 最小学习率（1e-6 ~ 1e-4）
+        )
+
+        # 修改模型编译部分
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule),  # 使用调度器
+            loss=focal_loss,
+            metrics=[
+                'accuracy',
+                MacroPrecision(num_classes=5),
+                MacroRecall(num_classes=5),
+                MacroF1(num_classes=5),
+            ]
+        )
+
         # 回调函数
         callbacks = [
             tf.keras.callbacks.EarlyStopping(
-                monitor='val_accuracy', patience=1, restore_best_weights=True),
+                monitor='val_loss',
+                patience=3,  # 允许3个epoch没有改进
+                min_delta=0.001,  # 最小改进阈值
+                restore_best_weights=True
+            ),
             tf.keras.callbacks.ModelCheckpoint(
                 str(fold_dir / 'best_model.h5'), save_best_only=True),
             tf.keras.callbacks.CSVLogger(str(fold_dir / 'training_log.csv'))
@@ -94,13 +123,12 @@ def main():
         history = model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
-            epochs=1,
-            batch_size=32,
+            epochs=EPOCHS,  # 使用新的总epoch数
+            batch_size=BATCH_SIZE,
             callbacks=callbacks,
             class_weight=class_weights_dict,
             verbose=1
         )
-        # 在model.fit之后添加以下代码
 
         # 加载最佳模型
         model = tf.keras.models.load_model(
@@ -134,8 +162,6 @@ def main():
         y_val_pred_labels = np.argmax(y_val_pred, axis=1)
 
         # 生成分类报告和混淆矩阵
-
-
         class_names = ['W', 'N1', 'N2', 'N3', 'R']
         report = classification_report(y_val, y_val_pred_labels, target_names=class_names, output_dict=True)
         report_df = pd.DataFrame(report).transpose()
