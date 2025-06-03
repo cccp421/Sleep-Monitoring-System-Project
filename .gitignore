@@ -1,2 +1,4 @@
 # 忽略所有实验数据
-/experiments/
+/model/
+
+/.idea/
