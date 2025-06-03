@@ -1,13 +1,17 @@
 import argparse
 import glob
+import math
 import ntpath
 import os
 import shutil
-import pyedflib
 import numpy as np
+
+import pyedflib
+import pandas as pd
 
 from sleepstage import stage_dict
 from logger import get_logger
+
 
 # Have to manually define based on the dataset
 ann2label = {
@@ -20,11 +24,12 @@ ann2label = {
     "Movement time": 5
 }
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default="data/sleepedf/sleep-cassette",
+    parser.add_argument("--data_dir", type=str, default="E:/DREAMT base/sleep-edf/sleep-edf-database-expanded-1.0.0/sleep-cassette",
                         help="File path to the Sleep-EDF dataset.")
-    parser.add_argument("--output_dir", type=str, default="data/sleepedf/sleep-cassette/eeg_fpz_cz",
+    parser.add_argument("--output_dir", type=str, default="E:/DREAMT base/sleep-edf/sleep-edf-database-expanded-1.0.0/sleep-cassette/eeg_fpz_cz",
                         help="Directory where to save outputs.")
     parser.add_argument("--select_ch", type=str, default="EEG Fpz-Cz",
                         help="Name of the channel in the dataset.")
@@ -87,12 +92,7 @@ def main():
                 break
         if select_ch_idx == -1:
             raise Exception("Channel not found.")
-        
-        if psg_f.datarecord_duration == 60:
-            sampling_rate = psg_f.getSampleFrequency(select_ch_idx)/60
-        else:
-            sampling_rate = psg_f.getSampleFrequency(select_ch_idx)/30
-        
+        sampling_rate = psg_f.getSampleFrequency(select_ch_idx)
         n_epoch_samples = int(epoch_duration * sampling_rate)
         signals = psg_f.readSignal(select_ch_idx).reshape(-1, n_epoch_samples)
         logger.info("Select channel: {}".format(select_ch))
@@ -127,7 +127,7 @@ def main():
             duration_epoch = int(duration_sec / epoch_duration)
 
             # Generate sleep stage labels
-            label_epoch = np.ones(duration_epoch, dtype=np.int) * label
+            label_epoch = np.ones(duration_epoch, dtype=np.int32) * label
             labels.append(label_epoch)
 
             total_duration += duration_sec
@@ -175,8 +175,8 @@ def main():
         # Save
         filename = ntpath.basename(psg_fnames[i]).replace("-PSG.edf", ".npz")
         save_dict = {
-            "x": x, 
-            "y": y, 
+            "x": x,
+            "y": y,
             "fs": sampling_rate,
             "ch_label": select_ch,
             "start_datetime": start_datetime,
@@ -192,3 +192,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
