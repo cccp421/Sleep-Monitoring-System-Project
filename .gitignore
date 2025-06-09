@@ -1,4 +1,5 @@
 # 忽略所有实验数据
 /model/
-
+/TGAM/version3/health_data/
+/TGAM/version3/raw_data/
 /.idea/
