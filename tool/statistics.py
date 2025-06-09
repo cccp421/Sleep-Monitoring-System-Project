@@ -109,7 +109,7 @@ for bar in bars:
              ha='center',
              va='bottom',
              fontsize=9,
-             color='dimgrey')  # 使用深灰色文本提高可读性
+             color='black')  # 使用深灰色文本提高可读性
 
 # 添加百分比标签
 for i, bar in enumerate(bars):
@@ -126,13 +126,13 @@ for i, bar in enumerate(bars):
 
 # 美化柱状图
 ax1.set_title(f'Overall Sleep Stage Distribution\n({file_count} Files, {total_epochs:,} Epochs)',
-          fontsize=12, fontweight='bold', color='dimgrey')
-ax1.set_xlabel('Sleep Stage', fontsize=10, color='dimgrey')
-ax1.set_ylabel('Number of Epochs', fontsize=10, color='dimgrey')
+          fontsize=12, fontweight='bold', color='black')
+ax1.set_xlabel('Sleep Stage', fontsize=10, color='black')
+ax1.set_ylabel('Number of Epochs', fontsize=10, color='black')
 ax1.grid(axis='y', alpha=0.3, linestyle='--', color='lightgrey')
 ax1.spines['top'].set_visible(False)
 ax1.spines['right'].set_visible(False)
-ax1.tick_params(colors='dimgrey')  # 刻度标签也使用深灰色
+ax1.tick_params(colors='black')  # 刻度标签也使用深灰色
 
 # # 添加 (a) 索引标签
 # ax1.text(0.5, -0.15, '(a)', transform=ax1.transAxes,
@@ -141,19 +141,19 @@ ax1.tick_params(colors='dimgrey')  # 刻度标签也使用深灰色
 # 中间：目标患者睡眠阶段分布饼图
 ax2 = plt.subplot(1, 3, 2)  # 1行3列，第2个位置
 wedges, texts, autotexts = ax2.pie(sizes_target, labels=labels_target,
-                                   autopct='%1.1f%%', startangle=200,
+                                   autopct='%1.1f%%', startangle=2000, radius=1.1,
                                    colors=pie_colors, wedgeprops={'edgecolor': 'lightgrey', 'linewidth': 0.7})
 
 # 设置文本颜色为深灰色
 for text in texts:
-    text.set_color('dimgrey')
+    text.set_color('black')
     text.set_fontsize(10)
 for autotext in autotexts:
     autotext.set_color('black')  # 百分比文本保持黑色
     autotext.set_fontsize(9)
 
 ax2.set_title(f'Subjects: SC4281G0\n(Total Epochs: {total_epochs_target})',
-          fontsize=12, fontweight='bold', color='dimgrey')
+          fontsize=12, fontweight='bold', color='black')
 
 # 右侧：目标患者睡眠阶段随时间变化图 - 子图 (b)
 ax3 = plt.subplot(1, 3, 3)  # 1行3列，第3个位置
@@ -163,12 +163,12 @@ ax3.scatter(x_axis / 120, y_target, c=point_colors, s=5, alpha=0.8)  # 增大点
 
 # 设置坐标轴
 ax3.set_yticks(list(stage_map.keys()), list(stage_map.values()))
-ax3.set_xlabel('Time (Hours)', fontsize=10, color='dimgrey')
-ax3.set_ylabel('Sleep Stage', fontsize=10, color='dimgrey')
-ax3.set_title('Sleep Stage Progression Over Time', fontsize=12, fontweight='bold', color='dimgrey')
+ax3.set_xlabel('Time (Hours)', fontsize=10, color='black')
+ax3.set_ylabel('Sleep Stage', fontsize=10, color='black')
+ax3.set_title('Sleep Stage Progression Over Time', fontsize=12, fontweight='bold', color='black')
 ax3.grid(alpha=0.3, linestyle='--', color='lightgrey')
 ax3.set_facecolor((0.98, 0.98, 0.98))  # 设置背景为非常浅的灰色提高可读性
-ax3.tick_params(colors='dimgrey')  # 刻度标签也使用深灰色
+ax3.tick_params(colors='black')  # 刻度标签也使用深灰色
 
 # # 添加 (b) 索引标签
 # ax3.text(-0.1, -0.15, '(b)', transform=ax3.transAxes,

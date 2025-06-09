@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import backend as K
 import numpy as np
-def weighted_categorical_crossentropy(weights):
+def weighted_categorical_loss(weights):
     weights = K.variable(weights)
 
     def loss(y_true, y_pred):
@@ -68,7 +68,7 @@ def create_model(Fs=100, n_classes=5, seq_length=15, summary=True):
     model = tf.keras.models.Model(x_input, x_out)
     model.compile(
         optimizer='adam',
-        loss=weighted_categorical_crossentropy(np.array([1, 1.5, 1, 1, 1])),
+        loss=weighted_categorical_loss(np.array([1, 1.5, 1, 1, 1])),
         metrics=['accuracy']
     )
 

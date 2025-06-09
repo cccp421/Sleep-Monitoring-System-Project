@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, cohen_kappa_score
 from model import create_model
 
+
 ## data preparation
 data_path = 'E:/DREAMT base/sleep-edf/sleep-edf-database-expanded-1.0.0/sleep-cassette/eeg_fpz_cz'
 # data_path = 'data/ISRUC_S1'
