@@ -225,45 +225,24 @@ class TGAMGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        main_layout = QHBoxLayout(central_widget)  # 使用水平布局
+        # 使用垂直布局替代水平布局
+        main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(10)
+
+        # 上部容器（波形图和仪表盘）
+        top_container = QWidget()
+        top_layout = QHBoxLayout(top_container)
+        top_layout.setContentsMargins(0, 0, 0, 0)
 
         # 左侧仪表盘区域
         self.dashboard_tab = DashboardTab()
+        top_layout.addWidget(self.dashboard_tab, 1)  # 左侧仪表盘占比1份
 
-        # 添加健康数据分组框
-        health_group = QGroupBox("健康数据")
-        health_layout = QGridLayout(health_group)
-
-        # 健康数据指标
-        health_indicators = [
-            ("心率 (bpm):", "heart_rate_value"),
-            ("血氧 (%):", "spo2_value"),
-            ("收缩压:", "systolic_bp_value"),
-            ("舒张压:", "diastolic_bp_value"),
-            ("呼吸频率:", "respiration_rate_value"),
-            ("体温 (°C):", "temperature_value"),
-            ("环境温度 (°C):", "ambient_temp_value"),
-            ("疲劳值:", "fatigue_value")
-        ]
-
-        # 添加健康数据标签
-        for i, (label_text, value_name) in enumerate(health_indicators):
-            row = i // 2
-            col = (i % 2) * 2
-            health_layout.addWidget(QLabel(label_text), row, col)
-            value_label = QLabel("-")
-            setattr(self, value_name, value_label)
-            health_layout.addWidget(value_label, row, col + 1)
-
-        # 将健康数据添加到仪表盘
-        self.dashboard_tab.layout().addWidget(health_group)
-
-        # 右侧区域 (波形和频谱)
-        right_container = QFrame()
+        # 右侧波形显示区域
+        right_container = QWidget()
         right_layout = QVBoxLayout(right_container)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(10)
+        right_layout.setSpacing(5)
 
         # 波形显示
         waveform_frame = QFrame()
@@ -281,33 +260,62 @@ class TGAMGUI(QMainWindow):
         self.curve = self.plot_widget.plot(pen='b')
         waveform_layout.addWidget(self.plot_widget)
 
-        # EEG频谱显示
-        spectrum_frame = QFrame()
-        spectrum_frame.setFrameShape(QFrame.StyledPanel)
-        spectrum_layout = QVBoxLayout(spectrum_frame)
-        spectrum_layout.setContentsMargins(0, 0, 0, 0)
+        # 添加波形图到右侧区域（高度减半）
+        right_layout.addWidget(waveform_frame, 1)  # 波形图占右侧区域50%高度
 
-        self.spectrum_widget = pg.PlotWidget()
-        self.spectrum_widget.setBackground('w')
-        self.spectrum_widget.setTitle("EEG功率谱", color='k', size="12pt")
-        self.spectrum_widget.setLabel('left', '功率值')
-        self.spectrum_widget.setLabel('bottom', '频段')
-        self.bars = pg.BarGraphItem(x=range(8), height=[0] * 8, width=0.6)
-        self.spectrum_widget.addItem(self.bars)
-        self.spectrum_widget.setYRange(0, 100000)
-        bands = ["Delta", "Theta", "Low Alpha", "High Alpha",
-                 "Low Beta", "High Beta", "Low Gamma", "Mid Gamma"]
-        x_axis = self.spectrum_widget.getAxis('bottom')
-        x_axis.setTicks([[(i, bands[i]) for i in range(8)]])
-        spectrum_layout.addWidget(self.spectrum_widget)
+        top_layout.addWidget(right_container, 4)  # 右侧波形图区域占比4份
+        main_layout.addWidget(top_container, 1)  # 上部区域整体占比50%
 
-        # 添加波形和频谱到右侧区域
-        right_layout.addWidget(waveform_frame, 1)
-        right_layout.addWidget(spectrum_frame, 1)
+        # 下部健康数据窗口 (占整个窗口下半部分)
+        bottom_container = QWidget()
+        bottom_layout = QVBoxLayout(bottom_container)
 
-        # 添加左右部分到主布局
-        main_layout.addWidget(self.dashboard_tab, 1)
-        main_layout.addWidget(right_container, 4)
+        # 健康数据分组框 - 使用更大的标题和字体
+        health_group = QGroupBox("健康监测数据")
+        health_group.setStyleSheet("QGroupBox { font-size: 14pt; font-weight: bold; }")
+        health_layout = QGridLayout(health_group)
+        health_layout.setSpacing(15)  # 增加间距
+
+        # 健康数据指标 - 添加更多标签
+        health_indicators = [
+            ("心率:", "heart_rate_value", "bpm"),
+            ("血氧饱和度:", "spo2_value", "%"),
+            ("收缩压(高压):", "systolic_bp_value", "mmHg"),
+            ("舒张压(低压):", "diastolic_bp_value", "mmHg"),
+            ("呼吸频率:", "respiration_rate_value", "次/分"),
+            ("体温:", "temperature_value", "°C"),
+            ("环境温度:", "ambient_temp_value", "°C"),
+            ("疲劳指数:", "fatigue_value", ""),
+            ("RR间期:", "rr_value", "ms"),
+            ("HRV-SDNN:", "hrv_sdnn_value", "ms"),
+            ("HRV-RMSSD:", "hrv_rmssd_value", "ms"),
+            ("微循环:", "microcirculation_value", "")
+        ]
+
+        # 添加健康数据标签 - 使用更大的字体
+        for i, (label_text, value_name, unit) in enumerate(health_indicators):
+            row = i // 3  # 每行3个指标
+            col = (i % 3) * 3
+
+            # 标签
+            label = QLabel(f"<b>{label_text}</b>")
+            label.setStyleSheet("font-size: 12pt;")
+            health_layout.addWidget(label, row, col)
+
+            # 值
+            value_label = QLabel("-")
+            value_label.setStyleSheet("font-size: 16pt; font-weight: bold; color: #1E90FF;")
+            setattr(self, value_name, value_label)
+            health_layout.addWidget(value_label, row, col + 1)
+
+            # 单位
+            unit_label = QLabel(unit)
+            unit_label.setStyleSheet("font-size: 10pt;")
+            health_layout.addWidget(unit_label, row, col + 2)
+
+        # 添加健康数据到下部区域
+        bottom_layout.addWidget(health_group)
+        main_layout.addWidget(bottom_container, 1)  # 下部健康数据占比50%
 
         # 状态栏
         self.status_bar = self.statusBar()
@@ -414,9 +422,6 @@ class TGAMGUI(QMainWindow):
         # 重置波形图
         self.curve.setData([], [])
 
-        # 重置频谱图
-        self.bars.setOpts(height=[0] * 8)
-
         # 重置仪表盘状态
         self.dashboard_tab.signal_strength.setText("-")
         self.dashboard_tab.attention_value.setText("-")
@@ -454,6 +459,7 @@ class TGAMGUI(QMainWindow):
         self.status_bar.showMessage(f"脑电设备连接失败: {message}", 5000)
 
         # 连接失败后启用连接按钮，禁用断开按钮
+        
         self.connect_eeg_btn.setEnabled(True)
         self.disconnect_eeg_btn.setEnabled(False)
 
@@ -496,22 +502,21 @@ class TGAMGUI(QMainWindow):
             self.dashboard_tab.low_gamma_value.setText(str(large_data['eeg_power'][6]))
             self.dashboard_tab.mid_gamma_value.setText(str(large_data['eeg_power'][7]))
 
-        # 更新频谱图
-        heights = [v for v in large_data['eeg_power']]
-        max_val = max(heights) if any(heights) else 1
-        heights = [h * 100000 / max_val for h in heights]  # 归一化
-        self.bars.setOpts(height=heights)
-
     def update_health_data(self, health_data):
-        """更新健康数据显示"""
-        self.heart_rate_value.setText(f"<b>{health_data['heart_rate']}</b>")
-        self.spo2_value.setText(f"<b>{health_data['blood_oxygen']}%</b>")
-        self.systolic_bp_value.setText(f"<b>{health_data['systolic_bp']}</b>")
-        self.diastolic_bp_value.setText(f"<b>{health_data['diastolic_bp']}</b>")
-        self.respiration_rate_value.setText(f"<b>{health_data['respiration_rate']}</b>")
-        self.temperature_value.setText(f"<b>{health_data['temperature']:.1f}°C</b>")
-        self.ambient_temp_value.setText(f"<b>{health_data['ambient_temp']:.1f}°C</b>")
-        self.fatigue_value.setText(f"<b>{health_data['fatigue']}</b>")
+        """更新健康数据显示 - 修改以适配新添加的字段"""
+        self.heart_rate_value.setText(f"{health_data['heart_rate']}")
+        self.spo2_value.setText(f"{health_data['blood_oxygen']}")
+        self.systolic_bp_value.setText(f"{health_data['systolic_bp']}")
+        self.diastolic_bp_value.setText(f"{health_data['diastolic_bp']}")
+        self.respiration_rate_value.setText(f"{health_data['respiration_rate']}")
+        self.temperature_value.setText(f"{health_data['temperature']:.1f}")
+        self.ambient_temp_value.setText(f"{health_data['ambient_temp']:.1f}")
+        self.fatigue_value.setText(f"{health_data['fatigue']}")
+        # 新添加的字段
+        self.rr_value.setText(f"{health_data.get('rr_interval', 'N/A')}")
+        self.hrv_sdnn_value.setText(f"{health_data.get('hrv_sdnn', 'N/A')}")
+        self.hrv_rmssd_value.setText(f"{health_data.get('hrv_rmssd', 'N/A')}")
+        self.microcirculation_value.setText(f"{health_data.get('microcirculation', 'N/A')}")
 
         # 在状态栏显示关键健康指标
         self.status_bar.showMessage(
