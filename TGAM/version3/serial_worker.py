@@ -197,13 +197,27 @@ class SerialWorker(QThread):
                 self.last_time = current_time
 
     def stop(self):
-        """停止串口线程"""
+        """停止串口线程并确保文件关闭"""
         self.running = False
+
+        # 关闭串口连接
         if self.ser and self.ser.is_open:
-            self.ser.close()
-        if self.raw_file:
-            self.raw_file.close()
-        self.wait()
+            try:
+                self.ser.close()
+            except:
+                pass
+
+        # 确保文件正确关闭
+        if self.raw_file and not self.raw_file.closed:
+            try:
+                self.raw_file.flush()  # 确保所有数据写入磁盘
+                os.fsync(self.raw_file.fileno())  # 强制同步到磁盘
+                self.raw_file.close()
+            except:
+                pass
+
+        # 最多等待500ms确保线程退出
+        self.wait(500)
 
     def refresh_ports(self):
         """刷新可用串口列表"""
@@ -222,6 +236,14 @@ class HealthWorker(QThread):
         self.port_name = "COM4"
         self.serial_port = None
         self.running = False
+
+        # 创建健康数据存储文件夹
+        self.data_dir = "health_data"  # 文件夹名称
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
+
+        self.health_file = None
+        self.health_writer = None
 
     def set_port(self, port):
         self.port_name = port
@@ -250,6 +272,24 @@ class HealthWorker(QThread):
 
     def run(self):
         """主线程函数"""
+        # 创建健康数据文件 - 保存在指定文件夹中
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.health_filename = os.path.join(self.data_dir, f"health_data_{timestamp}.csv")
+
+        try:
+            self.health_file = open(self.health_filename, 'w', newline='')
+            self.health_writer = csv.writer(self.health_file)
+            # 写入CSV头行
+            self.health_writer.writerow([
+                "Timestamp", "HeartRate", "BloodOxygen", "Microcirculation",
+                "SystolicBP", "DiastolicBP", "RespirationRate", "Fatigue",
+                "RRInterval", "HRV_SDNN", "HRV_RMSSD", "Temperature", "AmbientTemp"
+            ])
+        except Exception as e:
+            error_msg = f"无法创建健康数据文件: {str(e)}"
+            self.connection_status.emit(error_msg)
+            return
+
         try:
             self.serial_port = serial.Serial(
                 port=self.port_name,
@@ -275,11 +315,15 @@ class HealthWorker(QThread):
             buffer = bytearray()
             last_received = time.time()
 
+            # 记录健康数据的时间戳
+            health_timestamp = None
+
             while self.running:
                 if self.serial_port.in_waiting > 0:
                     data = self.serial_port.read(self.serial_port.in_waiting)
                     buffer.extend(data)
                     last_received = time.time()
+                    health_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 
                     # 处理包 (0xFF开头, 0xF1结尾)
                     while len(buffer) >= 24:
@@ -298,7 +342,11 @@ class HealthWorker(QThread):
                         if buffer[23] == 0xF1:
                             # 解析数据包
                             packet = buffer[:24]
-                            self.process_packet(packet)
+                            health_data = self.process_packet(packet)
+
+                            # 保存健康数据到文件
+                            self.save_health_data(health_timestamp, health_data)
+
                             buffer = buffer[24:]
                         else:
                             # 不是完整包，等待更多数据
@@ -332,12 +380,54 @@ class HealthWorker(QThread):
             'ambient_temp': packet[14] + packet[15] / 100.0,  # 环境温度
         }
         self.health_data_ready.emit(health_data)
+        return health_data
+
+    def save_health_data(self, timestamp, health_data):
+        """保存健康数据到CSV文件"""
+        if not self.health_writer:
+            return
+
+        try:
+            self.health_writer.writerow([
+                timestamp,
+                health_data['heart_rate'],
+                health_data['blood_oxygen'],
+                health_data['microcirculation'],
+                health_data['systolic_bp'],
+                health_data['diastolic_bp'],
+                health_data['respiration_rate'],
+                health_data['fatigue'],
+                health_data['rr_interval'],
+                health_data['hrv_sdnn'],
+                health_data['hrv_rmssd'],
+                health_data['temperature'],
+                health_data['ambient_temp']
+            ])
+        except Exception as e:
+            self.connection_status.emit(f"保存健康数据出错: {str(e)}")
 
     def stop(self):
-        """停止线程"""
+        """停止线程并确保资源释放"""
         self.running = False
+
+        # 发送停止命令
+        self.send_stop_command()
+
+        # 确保健康数据文件正确关闭
+        if self.health_file and not self.health_file.closed:
+            try:
+                self.health_file.flush()  # 确保所有数据写入磁盘
+                os.fsync(self.health_file.fileno())  # 强制同步到磁盘
+                self.health_file.close()
+            except Exception as e:
+                self.connection_status.emit(f"关闭健康数据文件失败: {str(e)}")
+
+        # 关闭串口
         if self.serial_port and self.serial_port.is_open:
-            # 发送停止命令
-            self.send_stop_command()
-            self.serial_port.close()
+            try:
+                self.serial_port.close()
+            except:
+                pass
+
+        # 等待线程退出
         self.wait(500)

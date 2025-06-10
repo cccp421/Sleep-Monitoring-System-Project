@@ -6,7 +6,7 @@ from serial_worker import SerialWorker, HealthWorker
 from dashboard import DashboardTab
 from collections import deque
 from sleep_assessment import SleepAssessmentWindow  # 导入新的睡眠评估窗口
-
+import time
 
 class TGAMGUI(QMainWindow):
     def __init__(self):
@@ -193,13 +193,33 @@ class TGAMGUI(QMainWindow):
         self.sleep_assessment_window = None
 
     def open_sleep_assessment(self):
-        """打开睡眠评估窗口"""
+        """打开睡眠质量评估窗口前停止数据采集"""
+        # 首先停止脑电设备
+        if self.serial_worker.isRunning():
+            self.disconnect_eeg_device()  # 调用断开连接方法
+
+        # 然后停止健康设备
+        if self.health_worker.isRunning():
+            self.disconnect_health_device()  # 调用断开连接方法
+
+        # 双重确保所有设备已停止
+        if self.serial_worker.isRunning():
+            self.serial_worker.stop()
+            self.serial_worker.wait(1000)  # 等待1秒确保线程停止
+        if self.health_worker.isRunning():
+            self.health_worker.stop()
+            self.health_worker.wait(1000)
+
+        # 更新状态栏
+        self.status_bar.showMessage("已停止数据采集，打开睡眠质量评估...")
+
+        # 现在打开睡眠评估窗口
         if self.sleep_assessment_window is None:
             self.sleep_assessment_window = SleepAssessmentWindow(self)
             self.sleep_assessment_window.show()
             self.status_bar.showMessage("已打开睡眠质量评估窗口")
         else:
-            # 如果窗口已经存在，则将其置顶并激活
+            # 如果窗口已经存在，则将其置顶
             self.sleep_assessment_window.activateWindow()
             self.sleep_assessment_window.raise_()
 
@@ -257,16 +277,16 @@ class TGAMGUI(QMainWindow):
         self.clear_eeg_data()
 
     def disconnect_eeg_device(self):
-        """断开脑电设备连接"""
+        """断开脑电设备连接并确保数据保存"""
         self.serial_worker.stop()
         self.dashboard_tab.connection_status.setText("<b style='color:red;'>断开连接</b>")
-        self.status_bar.showMessage("脑电设备已断开")
+        self.status_bar.showMessage("脑电设备已断开，数据已保存")
 
-        # 断开连接后启用连接按钮，禁用断开按钮
+        # 更新按钮状态
         self.connect_eeg_btn.setEnabled(True)
         self.disconnect_eeg_btn.setEnabled(False)
 
-        # 清除所有数据和图形状态
+        # 清除UI上的脑电数据
         self.clear_eeg_data()
 
     def connect_health_device(self):
@@ -285,13 +305,16 @@ class TGAMGUI(QMainWindow):
         self.disconnect_health_btn.setEnabled(True)
 
     def disconnect_health_device(self):
-        """断开健康检测设备连接"""
+        """断开健康检测设备连接并确保停止"""
         # 发送停止命令
-        self.status_bar.showMessage("正在发送停止命令...")
+        self.health_worker.send_stop_command()
+
+        # 等待500ms确保命令发送
+        time.sleep(0.5)
 
         # 断开设备连接
         self.health_worker.stop()
-        self.status_bar.showMessage("健康设备已断开")
+        self.status_bar.showMessage("健康设备已断开，数据已保存")
 
         # 重置健康数据显示
         self.reset_health_data()
