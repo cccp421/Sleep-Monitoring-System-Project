@@ -5,13 +5,13 @@ import pyqtgraph as pg
 from serial_worker import SerialWorker, HealthWorker
 from dashboard import DashboardTab
 from collections import deque
-
+from sleep_assessment import SleepAssessmentWindow  # 导入新的睡眠评估窗口
 
 
 class TGAMGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("TGAM 脑电与健康数据采集系统")
+        self.setWindowTitle("SMS 脑电与健康数据采集系统")
         self.setGeometry(100, 100, 1400, 900)  # 增大窗口尺寸以适应新布局
 
         # 初始化UI
@@ -33,14 +33,8 @@ class TGAMGUI(QMainWindow):
 
     def init_ui(self):
         """初始化用户界面"""
-        # 创建菜单栏
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu('文件')
-
-        exit_action = QAction('退出', self)
-        exit_action.setShortcut('Ctrl+Q')
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
+        sleep_assessment_action = QAction('睡眠质量评估', self)
+        sleep_assessment_action.triggered.connect(self.open_sleep_assessment)
 
         # 创建工具栏
         toolbar = self.addToolBar('控制')
@@ -87,6 +81,13 @@ class TGAMGUI(QMainWindow):
         self.disconnect_health_btn.clicked.connect(self.disconnect_health_device)
         self.disconnect_health_btn.setEnabled(False)
         toolbar.addWidget(self.disconnect_health_btn)
+
+        # 新增睡眠评估按钮
+        self.sleep_assessment_btn = QPushButton("睡眠质量评估")
+        self.sleep_assessment_btn.setStyleSheet("background-color: #6A5ACD; color: white;")
+        self.sleep_assessment_btn.clicked.connect(self.open_sleep_assessment)
+        toolbar.addWidget(self.sleep_assessment_btn)
+        toolbar.addSeparator()  # 添加分隔符
 
         # 主内容区域
         central_widget = QWidget()
@@ -187,6 +188,25 @@ class TGAMGUI(QMainWindow):
         # 状态栏
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("就绪，请选择串口并连接设备")
+
+        # 睡眠评估窗口
+        self.sleep_assessment_window = None
+
+    def open_sleep_assessment(self):
+        """打开睡眠评估窗口"""
+        if self.sleep_assessment_window is None:
+            self.sleep_assessment_window = SleepAssessmentWindow(self)
+            self.sleep_assessment_window.show()
+            self.status_bar.showMessage("已打开睡眠质量评估窗口")
+        else:
+            # 如果窗口已经存在，则将其置顶并激活
+            self.sleep_assessment_window.activateWindow()
+            self.sleep_assessment_window.raise_()
+
+    def on_sleep_assessment_closed(self):
+        """睡眠评估窗口关闭时的回调函数"""
+        self.sleep_assessment_window = None
+        self.status_bar.showMessage("睡眠评估窗口已关闭")
 
     def connect_signals(self):
         """连接信号和槽函数"""
@@ -307,6 +327,10 @@ class TGAMGUI(QMainWindow):
         self.temperature_value.setText("-")
         self.ambient_temp_value.setText("-")
         self.fatigue_value.setText("-")
+        self.rr_value.setText("-")
+        self.hrv_sdnn_value.setText("-")
+        self.hrv_rmssd_value.setText("-")
+        self.microcirculation_value.setText("-")
 
     def eeg_connection_success(self):
         """脑电设备连接成功处理"""
@@ -326,7 +350,7 @@ class TGAMGUI(QMainWindow):
         self.status_bar.showMessage(f"脑电设备连接失败: {message}", 5000)
 
         # 连接失败后启用连接按钮，禁用断开按钮
-        
+
         self.connect_eeg_btn.setEnabled(True)
         self.disconnect_eeg_btn.setEnabled(False)
 
@@ -442,14 +466,9 @@ class TGAMGUI(QMainWindow):
             self.health_worker.stop()
             self.health_worker.wait(1000)
 
+        # 关闭睡眠评估窗口
+        if self.sleep_assessment_window:
+            self.sleep_assessment_window.close()
+
         event.accept()
 
-
-if __name__ == "__main__":
-    import sys
-    from PyQt5.QtWidgets import QApplication
-
-    app = QApplication(sys.argv)
-    main_window = TGAMGUI()
-    main_window.show()
-    sys.exit(app.exec_())

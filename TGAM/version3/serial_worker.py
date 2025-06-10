@@ -213,7 +213,7 @@ class SerialWorker(QThread):
 
 
 class HealthWorker(QThread):
-    """独立线程处理心率检测模块的数据并保存数据"""
+    """独立线程处理心率检测模块的数据"""
     health_data_ready = pyqtSignal(dict)
     connection_status = pyqtSignal(str)
 
@@ -222,13 +222,6 @@ class HealthWorker(QThread):
         self.port_name = "COM4"
         self.serial_port = None
         self.running = False
-
-        # 添加数据保存相关属性
-        self.health_data_dir = "health_data"  # 健康数据文件夹名称
-        if not os.path.exists(self.health_data_dir):
-            os.makedirs(self.health_data_dir)
-        self.data_file = None
-        self.csv_writer = None
 
     def set_port(self, port):
         self.port_name = port
@@ -255,28 +248,6 @@ class HealthWorker(QThread):
                 self.connection_status.emit(f"发送停止命令失败: {str(e)}")
         return False
 
-    def create_data_file(self):
-        """创建健康数据文件"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.health_filename = os.path.join(self.health_data_dir, f"health_data_{timestamp}.csv")
-
-        try:
-            self.data_file = open(self.health_filename, 'w', newline='')
-            self.csv_writer = csv.writer(self.data_file)
-
-            # 写入CSV表头
-            headers = [
-                "Timestamp", "HeartRate", "BloodOxygen", "Microcirculation",
-                "SystolicBP", "DiastolicBP", "RespirationRate", "Fatigue",
-                "RRInterval", "HRV_SDNN", "HRV_RMSSD", "Temperature", "AmbientTemp"
-            ]
-            self.csv_writer.writerow(headers)
-
-            return True
-        except Exception as e:
-            self.connection_status.emit(f"无法创建数据文件: {str(e)}")
-            return False
-
     def run(self):
         """主线程函数"""
         try:
@@ -292,10 +263,6 @@ class HealthWorker(QThread):
                 self.serial_port.open()
 
             self.connection_status.emit("已连接")
-
-            # 创建数据文件
-            if not self.create_data_file():
-                return
 
             # 发送启动命令
             if self.send_start_command():
@@ -349,10 +316,7 @@ class HealthWorker(QThread):
             self.stop()
 
     def process_packet(self, packet):
-        """解析24字节的数据包并保存到文件"""
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-
-        # 解析健康数据
+        """解析24字节的数据包"""
         health_data = {
             'heart_rate': packet[2],  # 心率
             'blood_oxygen': packet[3],  # 血氧
@@ -367,44 +331,13 @@ class HealthWorker(QThread):
             'temperature': packet[12] + packet[13] / 100.0,  # 体温
             'ambient_temp': packet[14] + packet[15] / 100.0,  # 环境温度
         }
-
-        # 确保所有值都是数字类型（避免None导致写文件错误）
-        row_data = [timestamp]
-        for key in [
-            'heart_rate', 'blood_oxygen', 'microcirculation',
-            'systolic_bp', 'diastolic_bp', 'respiration_rate',
-            'fatigue', 'rr_interval', 'hrv_sdnn', 'hrv_rmssd',
-            'temperature', 'ambient_temp'
-        ]:
-            value = health_data.get(key, 0)  # 如果值为None则使用0
-            row_data.append(float(value) if value is not None else 0.0)
-
-        # 写入CSV文件
-        if self.csv_writer:
-            self.csv_writer.writerow(row_data)
-
-        # 发出信号（使用原始数据）
         self.health_data_ready.emit(health_data)
 
     def stop(self):
-        """停止线程并清理资源"""
+        """停止线程"""
         self.running = False
         if self.serial_port and self.serial_port.is_open:
-            try:
-                self.send_stop_command()
-                self.serial_port.close()
-            except Exception as e:
-                self.connection_status.emit(f"关闭串口时出错: {str(e)}")
-
-        # 关闭数据文件
-        if self.data_file:
-            try:
-                self.data_file.flush()
-                self.data_file.close()
-                self.connection_status.emit(f"数据已保存至: {self.health_filename}")
-            except Exception as e:
-                self.connection_status.emit(f"关闭文件时出错: {str(e)}")
-
-        self.data_file = None
-        self.csv_writer = None
+            # 发送停止命令
+            self.send_stop_command()
+            self.serial_port.close()
         self.wait(500)
