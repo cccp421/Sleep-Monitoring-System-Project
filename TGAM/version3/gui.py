@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QComboBox, QFrame, QAction, QGroupBox, QGridLayout)
+                             QLabel, QPushButton, QComboBox, QFrame, QAction, QGroupBox, QGridLayout, QSizePolicy)
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtSerialPort import QSerialPortInfo
 import pyqtgraph as pg
 from serial_worker import SerialWorker, HealthWorker
@@ -38,6 +39,9 @@ class TGAMGUI(QMainWindow):
 
         # 创建工具栏
         toolbar = self.addToolBar('控制')
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)  # 文字在图标旁边
+        toolbar.setIconSize(QSize(30, 30))  # 设置较大的图标尺寸
+        toolbar.setFixedHeight(50)  # 增加工具栏的高度
 
         # 脑电串口选择
         toolbar.addWidget(QLabel("脑电接口:"))
@@ -81,6 +85,11 @@ class TGAMGUI(QMainWindow):
         self.disconnect_health_btn.clicked.connect(self.disconnect_health_device)
         self.disconnect_health_btn.setEnabled(False)
         toolbar.addWidget(self.disconnect_health_btn)
+
+        # 添加一个可伸缩的空格，使右侧按钮靠右
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        toolbar.addWidget(spacer)
 
         # 新增睡眠评估按钮
         self.sleep_assessment_btn = QPushButton("睡眠质量评估")

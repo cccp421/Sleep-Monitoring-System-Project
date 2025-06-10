@@ -183,8 +183,6 @@ class SleepAssessmentWindow(QMainWindow):
         # 添加容器到主布局
         layout.addWidget(health_container)
 
-        # layout.addLayout(self.health_grid)
-
         # 分隔线
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
