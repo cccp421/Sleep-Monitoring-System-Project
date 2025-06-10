@@ -40,13 +40,13 @@ class TGAMGUI(QMainWindow):
         toolbar = self.addToolBar('控制')
 
         # 脑电串口选择
-        toolbar.addWidget(QLabel("脑电串口:"))
+        toolbar.addWidget(QLabel("脑电接口:"))
         self.eeg_port_combo = QComboBox()
         self.eeg_port_combo.setMinimumWidth(150)
         toolbar.addWidget(self.eeg_port_combo)
 
         # 健康设备串口选择
-        toolbar.addWidget(QLabel("健康串口:"))
+        toolbar.addWidget(QLabel("健康接口:"))
         self.health_port_combo = QComboBox()
         self.health_port_combo.setMinimumWidth(150)
         toolbar.addWidget(self.health_port_combo)
