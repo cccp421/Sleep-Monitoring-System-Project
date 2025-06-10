@@ -109,60 +109,81 @@ class SleepAssessmentWindow(QMainWindow):
 
         layout.addLayout(self.metrics_grid)
 
-        # 健康监测指标区 - 使用网格布局，2列4行
+        # 健康监测指标区
         health_metrics_label = QLabel("<b>健康监测指标</b>")
         health_metrics_label.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
         health_metrics_label.setStyleSheet("padding: 15px 0 8px 0; color: #2E86C1;")
         layout.addWidget(health_metrics_label)
 
-        # 健康监测网格布局 - 增加列宽
-        self.health_grid = QGridLayout()
-        self.health_grid.setHorizontalSpacing(30)  # 增加列间距
-        self.health_grid.setVerticalSpacing(12)
+        # 改用垂直布局包装水平布局
+        health_container = QWidget()
+        health_container_layout = QHBoxLayout(health_container)
+        health_container_layout.setSpacing(40)  # 增加间距避免重叠
 
-        # 初始化健康监测指标标签 - 每行3部分：名称、值+单位、范围
+        # 创建左右两列布局
+        left_column = QVBoxLayout()
+        right_column = QVBoxLayout()
+
+        # 健康监测指标项
         health_items = [
-            ("heart_rate", "心率:", "-", "次/分"),
-            ("blood_oxygen", "血氧:", "-", "%"),
-            ("temperature", "体温:", "-", "℃"),
-            ("respiration_rate", "呼吸频率:", "-", "次/分"),
-            ("ambient_temp", "环境温度:", "-", "℃"),
-            ("systolic_bp", "收缩压:", "-", "mmHg"),
-            ("diastolic_bp", "舒张压:", "-", "mmHg"),
-            ("fatigue", "疲劳指数:", "-", "")
+            ("heart_rate", "心率:", "次/分"),
+            ("blood_oxygen", "血氧:", "%"),
+            ("temperature", "体温:", "℃"),
+            ("respiration_rate", "呼吸频率:", "次/分"),
+            ("ambient_temp", "环境温度:", "℃"),
+            ("fatigue", "疲劳指数:", ""),
+            ("systolic_bp", "收缩压:", "mmHg"),
+            ("diastolic_bp", "舒张压:", "mmHg")
         ]
 
         self.health_labels = {}
-        for i, (key, label, value, unit) in enumerate(health_items):
-            row = i // 2  # 每2列，所以行数为0-3
-            col = (i % 2) * 3  # 每列占3列：名称、值、范围
+        for i, (key, label, unit) in enumerate(health_items):
+            # 创建每项的水平布局
+            item_layout = QHBoxLayout()
+            item_layout.setSpacing(10)
 
             # 名称标签
             name_label = QLabel(label)
             name_label.setFont(QFont("Microsoft YaHei", 9))
-            name_label.setFixedWidth(70)  # 固定宽度确保对齐
-            name_label.setStyleSheet("font-weight: bold;")
-            self.health_grid.addWidget(name_label, row, col)
+            name_label.setStyleSheet("font-weight: bold; min-width: 80px;")
+            item_layout.addWidget(name_label)
 
-            # 值标签（包含单位）
-            value_str = f"{value} {unit}"
-            value_label = QLabel(value_str)
+            # 值标签（带单位）
+            value_label = QLabel(f"- {unit}")
             value_label.setFont(QFont("Microsoft YaHei", 9))
-            value_label.setFixedWidth(80)  # 固定宽度
-            value_label.setAlignment(Qt.AlignLeft)
-            self.health_grid.addWidget(value_label, row, col + 1)
+            value_label.setStyleSheet("min-width: 90px;")
+            item_layout.addWidget(value_label)
+
+            # 添加弹性空间
+            item_layout.addSpacing(15)
 
             # 范围标签
             min_val, max_val, _ = self.health_ranges.get(key, (0, 0, ""))
-            range_text = f"[正常范围: {min_val}-{max_val}]"
-            range_label = QLabel(range_text)
+            range_label = QLabel(f"[正常范围: {min_val}-{max_val}]")
             range_label.setFont(QFont("Microsoft YaHei", 8))
             range_label.setStyleSheet("color: #7F8C8D; font-style: italic;")
-            self.health_grid.addWidget(range_label, row, col + 2)
+            item_layout.addWidget(range_label)
+
+            # 添加弹性空间使内容靠左
+            item_layout.addStretch(1)
+
+            # 将项添加到左右列
+            if i < len(health_items) // 2:
+                left_column.addLayout(item_layout)
+            else:
+                right_column.addLayout(item_layout)
 
             self.health_labels[f"{key}_value"] = value_label
 
-        layout.addLayout(self.health_grid)
+        # 添加左右列到容器
+        health_container_layout.addLayout(left_column)
+        health_container_layout.addSpacing(30)  # 增加列间距
+        health_container_layout.addLayout(right_column)
+
+        # 添加容器到主布局
+        layout.addWidget(health_container)
+
+        # layout.addLayout(self.health_grid)
 
         # 分隔线
         separator = QFrame()
@@ -218,7 +239,26 @@ class SleepAssessmentWindow(QMainWindow):
         # 文件选择按钮
         file_btn = QPushButton("选择文件")
         file_btn.setFont(QFont("Microsoft YaHei", 9))
-        file_btn.setStyleSheet("padding: 6px 12px; border-radius: 4px;")
+        file_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #3498DB;  /* 按钮背景色 */
+            color: white;               /* 文字颜色 */
+            padding: 8px 15px;          /* 按钮内边距 */
+            border-radius: 4px;         /* 圆角大小 */
+            font-weight: bold;          /* 加粗文字 */
+            border: none;               /* 无边框 */
+        }
+        QPushButton:hover {
+            background-color: #2980B9;  /* 鼠标悬停时的颜色 */
+        }
+        QPushButton:pressed {
+            background-color: #1F618D;  /* 按下时的颜色 */
+            padding: 7px 14px 9px 16px; /* 按下时轻微下移 */
+        }
+        QPushButton:disabled {
+            background-color: #AAB7B8;  /* 禁用状态的颜色 */
+        }
+    """)
         file_btn.clicked.connect(lambda: self.select_file(file_filter, path_input, slot_name))
         layout.addWidget(file_btn)
 
@@ -238,13 +278,13 @@ class SleepAssessmentWindow(QMainWindow):
         """处理选择的健康检测数据文件"""
         self.health_data_path = file_path
         self.status_label.setText(f"已选择健康检测文件: {os.path.basename(file_path)}")
-        self.process_data()
+        self.process_health_data()  # 直接处理健康数据
 
     def eeg_data_selected(self, file_path):
         """处理选择的脑电检测数据文件"""
         self.eeg_data_path = file_path
         self.status_label.setText(f"已选择脑电检测文件: {os.path.basename(file_path)}")
-        self.process_data()
+        self.process_eeg_data()  # 直接处理脑电数据
 
     def filter_abnormal_data(self, df, column, min_val=0, max_val=None):
         """
@@ -264,89 +304,111 @@ class SleepAssessmentWindow(QMainWindow):
 
         return df_filtered
 
-    def process_data(self):
-        """处理并显示健康检测和脑电检测数据"""
-        if not self.health_data_path or not self.eeg_data_path:
-            # 如果没有选择两个文件，不进行处理
-            if not self.health_data_path and not self.eeg_data_path:
-                self.status_label.setText("请选择健康检测和脑电检测数据文件")
-            elif not self.health_data_path:
-                self.status_label.setText("请选择健康检测数据文件")
+    def process_health_data(self):
+        """处理健康数据并更新健康监测指标"""
+        if not self.health_data_path:
+            self.status_label.setText("请选择健康检测数据文件")
+            return
+
+        try:
+            # 处理健康监测数据
+            health_df = pd.read_csv(self.health_data_path)
+
+            # 添加健康监测数据摘要信息
+            health_file = os.path.basename(self.health_data_path)
+
+            # 修正文件名解析逻辑 - 处理可能存在的前缀
+            parts = health_file.split('_')
+            if len(parts) >= 3:
+                # 最后两部分是日期和时间
+                health_date = parts[-2]
+                health_time = parts[-1].split('.')[0]  # 移除扩展名
             else:
-                self.status_label.setText("请选择脑电检测数据文件")
+                raise ValueError(f"健康监测文件名格式不正确: {health_file}")
+
+            # 解析日期和时间
+            date_display = f"{health_date[:4]}-{health_date[4:6]}-{health_date[6:8]}"
+            health_time_display = f"{health_time[:2]}:{health_time[2:4]}:{health_time[4:6]}"
+
+            # 处理时间格式转换
+            health_df['Timestamp'] = pd.to_datetime(health_df['Timestamp'], errors='coerce')
+
+            # 过滤异常数据
+            # 心率：正常范围 40-200
+            health_df = self.filter_abnormal_data(health_df, 'HeartRate', 40, 200)
+            # 血氧：正常范围 70-100
+            health_df = self.filter_abnormal_data(health_df, 'BloodOxygen', 70, 100)
+            # 体温：正常范围 35-42
+            health_df = self.filter_abnormal_data(health_df, 'Temperature', 35, 42)
+            # 呼吸频率：正常范围 5-60
+            health_df = self.filter_abnormal_data(health_df, 'RespirationRate', 5, 60)
+            # 环境温度：正常范围 -10-50
+            health_df = self.filter_abnormal_data(health_df, 'AmbientTemp', -10, 50)
+            # 疲劳指数：正常范围 0-100
+            health_df = self.filter_abnormal_data(health_df, 'Fatigue', 0, 100)
+            # 收缩压：正常范围 60-200
+            health_df = self.filter_abnormal_data(health_df, 'SystolicBP', 60, 200)
+            # 舒张压：正常范围 40-120
+            health_df = self.filter_abnormal_data(health_df, 'DiastolicBP', 40, 120)
+
+
+            # 计算平均值
+            heart_rate_avg = health_df['HeartRate'].mean()
+            blood_oxygen_avg = health_df['BloodOxygen'].mean()
+            temperature_avg = health_df['Temperature'].mean()
+            respiration_rate_avg = health_df['RespirationRate'].mean()
+            ambient_temp_avg = health_df['AmbientTemp'].mean()
+            systolic_bp_avg = health_df['SystolicBP'].mean()
+            diastolic_bp_avg = health_df['DiastolicBP'].mean()
+            fatigue_avg = health_df['Fatigue'].mean()
+
+            # 更新健康监测指标显示
+            self.update_health_metrics({
+                "heart_rate": heart_rate_avg,
+                "blood_oxygen": blood_oxygen_avg,
+                "temperature": temperature_avg,
+                "respiration_rate": respiration_rate_avg,
+                "ambient_temp": ambient_temp_avg,
+                "systolic_bp": systolic_bp_avg,
+                "diastolic_bp": diastolic_bp_avg,
+                "fatigue": fatigue_avg
+            })
+
+            # 更新状态
+            self.status_label.setText(f"健康数据已处理: {os.path.basename(self.health_data_path)}")
+
+        except Exception as e:
+            self.status_label.setText(f"健康数据处理错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def process_eeg_data(self):
+        """处理脑电数据并更新睡眠评估指标"""
+        if not self.eeg_data_path:
+            self.status_label.setText("请选择脑电检测数据文件")
             return
 
         try:
             # 模拟数据处理 - 在实际应用中应替换为实际的数据加载和处理逻辑
-            self.status_label.setText("正在处理数据...")
+            self.status_label.setText("正在处理脑电数据...")
 
-            # 1. 处理健康监测数据
-            try:
-                health_df = pd.read_csv(self.health_data_path)
-
-                # 添加健康监测数据摘要信息
-                health_file = os.path.basename(self.health_data_path)
-                _, health_date, health_time = health_file.split('_')
-
-                # 解析日期和时间
-                date_str = health_date  # "20250610"
-                date_display = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-                health_time = health_time.split('.')[0]  # "173102"
-                health_time_display = f"{health_time[:2]}:{health_time[2:4]}:{health_time[4:6]}"
-
-                # 处理时间格式转换
-                health_df['Timestamp'] = pd.to_datetime(health_df['Timestamp'], errors='coerce')
-
-                # 过滤异常数据
-                # 心率：正常范围 40-200
-                health_df = self.filter_abnormal_data(health_df, 'HeartRate', 40, 200)
-                # 血氧：正常范围 70-100
-                health_df = self.filter_abnormal_data(health_df, 'BloodOxygen', 70, 100)
-                # 体温：正常范围 35-42
-                health_df = self.filter_abnormal_data(health_df, 'Temperature', 35, 42)
-                # 呼吸频率：正常范围 5-60
-                health_df = self.filter_abnormal_data(health_df, 'RespirationRate', 5, 60)
-                # 环境温度：正常范围 -10-50
-                health_df = self.filter_abnormal_data(health_df, 'AmbientTemp', -10, 50)
-                # 收缩压：正常范围 60-200
-                health_df = self.filter_abnormal_data(health_df, 'SystolicBP', 60, 200)
-                # 舒张压：正常范围 40-120
-                health_df = self.filter_abnormal_data(health_df, 'DiastolicBP', 40, 120)
-                # 疲劳指数：正常范围 0-100
-                health_df = self.filter_abnormal_data(health_df, 'Fatigue', 0, 100)
-
-                # 计算平均值
-                heart_rate_avg = health_df['HeartRate'].mean()
-                blood_oxygen_avg = health_df['BloodOxygen'].mean()
-                temperature_avg = health_df['Temperature'].mean()
-                respiration_rate_avg = health_df['RespirationRate'].mean()
-                ambient_temp_avg = health_df['AmbientTemp'].mean()
-                systolic_bp_avg = health_df['SystolicBP'].mean()
-                diastolic_bp_avg = health_df['DiastolicBP'].mean()
-                fatigue_avg = health_df['Fatigue'].mean()
-
-                # 更新健康监测指标显示
-                self.update_health_metrics({
-                    "heart_rate": heart_rate_avg,
-                    "blood_oxygen": blood_oxygen_avg,
-                    "temperature": temperature_avg,
-                    "respiration_rate": respiration_rate_avg,
-                    "ambient_temp": ambient_temp_avg,
-                    "systolic_bp": systolic_bp_avg,
-                    "diastolic_bp": diastolic_bp_avg,
-                    "fatigue": fatigue_avg
-                })
-
-            except Exception as e:
-                self.status_label.setText(f"健康数据处理错误: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                return
-
-            # 2. 生成睡眠评估指标 (这里仍然是模拟数据)
             # 从文件名解析时间和用户信息
             eeg_file = os.path.basename(self.eeg_data_path)
-            _, eeg_date, eeg_time = eeg_file.split('_')
+
+            # 修正文件名解析逻辑 - 处理可能存在的前缀
+            parts = eeg_file.split('_')
+            if len(parts) >= 3:
+                # 最后两部分是日期和时间
+                eeg_date = parts[-2]
+                eeg_time = parts[-1].split('.')[0]  # 移除扩展名
+            else:
+                raise ValueError(f"脑电文件名格式不正确: {eeg_file}")
+
+            # 提取日期和时间信息
+            date_str = eeg_date
+            time_str = eeg_time
+            date_display = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            time_display = f"{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}"
 
             # 用户信息 - 在实际应用中应从文件中提取
             user_info = "用户ID: 001 | 性别: 男 | 年龄: 32"
@@ -365,18 +427,26 @@ class SleepAssessmentWindow(QMainWindow):
 
                 # 数据摘要
                 "user_info": user_info,
-                "detection_time": f"{date_display} {health_time_display}",
-                "records_count": f"{len(health_df)}条健康记录"
+                "detection_time": f"{date_display} {time_display}",
+                "records_count": "根据脑电数据计算"
             }
 
             # 更新界面显示
             self.update_data_display()
-            self.status_label.setText(f"数据分析完成: {date_display} 数据已处理")
+            self.status_label.setText(f"脑电数据已处理: {os.path.basename(self.eeg_data_path)}")
 
         except Exception as e:
-            self.status_label.setText(f"数据处理错误: {str(e)}")
+            self.status_label.setText(f"脑电数据处理错误: {str(e)}")
             import traceback
             traceback.print_exc()
+
+    def process_data(self):
+        """处理并显示健康检测和脑电检测数据（同时处理两个）"""
+        if self.health_data_path:
+            self.process_health_data()
+
+        if self.eeg_data_path:
+            self.process_eeg_data()
 
     def update_data_display(self):
         """更新界面上的数据展示"""
