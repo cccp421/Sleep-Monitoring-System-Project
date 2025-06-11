@@ -387,57 +387,132 @@ class SleepAssessmentWindow(QMainWindow):
             return
 
         try:
-            # 模拟数据处理 - 在实际应用中应替换为实际的数据加载和处理逻辑
+            # 重置报告数据
+            self.report_data = None
             self.status_label.setText("正在处理脑电数据...")
+            QApplication.processEvents()  # 更新UI
 
             # 从文件名解析时间和用户信息
             eeg_file = os.path.basename(self.eeg_data_path)
 
-            # 修正文件名解析逻辑 - 处理可能存在的前缀
-            parts = eeg_file.split('_')
-            if len(parts) >= 3:
-                # 最后两部分是日期和时间
-                eeg_date = parts[-2]
-                eeg_time = parts[-1].split('.')[0]  # 移除扩展名
-            else:
-                raise ValueError(f"脑电文件名格式不正确: {eeg_file}")
+            # 读取脑电数据
+            eeg_df = pd.read_csv(self.eeg_data_path)
 
-            # 提取日期和时间信息
-            date_str = eeg_date
-            time_str = eeg_time
-            date_display = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-            time_display = f"{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}"
+            # 验证数据列是否存在
+            required_columns = ['Epoch_Index', 'Sleep_Stage', 'Stage_Label']
+            missing_columns = [col for col in required_columns if col not in eeg_df.columns]
+            if missing_columns:
+                raise ValueError(f"数据文件缺少必要列: {', '.join(missing_columns)}")
 
-            # 用户信息 - 在实际应用中应从文件中提取
-            user_info = "用户ID: 001 | 性别: 男 | 年龄: 32"
+            # 处理睡眠阶段标签
+            valid_stages = {
+                0: 'W',  # Wakefulness
+                1: 'N1',  # NREM Stage 1
+                2: 'N2',  # NREM Stage 2
+                3: 'N3',  # NREM Stage 3 (Deep Sleep)
+                4: 'REM',  # REM Sleep
+                # 5: 'MOVE',  # Movement (不计算在内)
+                # 6: 'UNK'   # Unknown (不计算在内)
+            }
 
-            # 模拟数据读取和处理结果
+            # 过滤掉无效的睡眠阶段 (MOVE和UNK)
+            eeg_df = eeg_df[eeg_df['Sleep_Stage'].isin(valid_stages.keys())].copy()
+
+            # 映射睡眠阶段到名称
+            eeg_df['Stage_Name'] = eeg_df['Sleep_Stage'].map(valid_stages)
+
+            # 检查有效数据
+            if len(eeg_df) == 0:
+                # 如果没有有效数据，尝试查看实际存在的睡眠阶段值
+                unique_stages = sorted(eeg_df['Sleep_Stage'].unique())
+                raise ValueError(f"未找到有效睡眠阶段数据。文件中的睡眠阶段值为: {unique_stages}")
+
+            # 计算睡眠指标
+            metrics = self.calculate_sleep_metrics(eeg_df)
+
+            # 更新报告数据
             self.report_data = {
                 # 睡眠指标
-                "sleep_duration": "7.2小时",
-                "deep_sleep": "28% (良好)",
-                "light_sleep": "52% (正常)",
-                "rem_sleep": "20% (正常)",
-                "sleep_latency": "18分钟 (良好)",
-                "awakenings": "3次 (正常)",
-                "sleep_efficiency": "92% (优秀)",
-                "sleep_score": "86/100 (良好)",
+                "sleep_duration": f"{metrics['total_sleep_time']:.1f}小时",
+                "deep_sleep": f"{metrics['deep_sleep_percent']:.1f}%",
+                "light_sleep": f"{metrics['light_sleep_percent']:.1f}%",
+                "rem_sleep": f"{metrics['rem_sleep_percent']:.1f}%",
+                "sleep_latency": f"{metrics['sleep_latency']:.1f}分钟",
+                "awakenings": f"{metrics['awakenings']}次",
+                "sleep_efficiency": f"{metrics['sleep_efficiency']:.1f}%",
+                "sleep_score": f"{metrics['sleep_score']:.0f}/100",
 
                 # 数据摘要
-                "user_info": user_info,
-                "detection_time": f"{date_display} {time_display}",
-                "records_count": "根据脑电数据计算"
+                "user_info": f"数据文件: {eeg_file} | 有效记录数: {len(eeg_df)}",
+                "records_count": f"{len(eeg_df)}条有效记录"
             }
 
             # 更新界面显示
             self.update_data_display()
-            self.status_label.setText(f"脑电数据已处理: {os.path.basename(self.eeg_data_path)}")
+            self.status_label.setText(f"成功处理脑电数据: {os.path.basename(self.eeg_data_path)}")
 
         except Exception as e:
-            self.status_label.setText(f"脑电数据处理错误: {str(e)}")
+            error_msg = f"脑电数据处理错误: {str(e)}"
+            self.status_label.setText(error_msg)
+            print(error_msg)
             import traceback
             traceback.print_exc()
 
+    def calculate_sleep_metrics(self, df):
+        """计算睡眠质量指标"""
+        # 确保睡眠阶段名称列存在
+        if 'Stage_Name' not in df.columns:
+            # 如果忘记映射，使用原始值
+            df['Stage_Name'] = df['Sleep_Stage'].astype(str)
+
+        # 统计各睡眠阶段的数量
+        stage_counts = df['Stage_Name'].value_counts().to_dict()
+
+        # 总记录时长（分钟）
+        total_minutes = len(df) * 0.5  # 每30秒一条记录
+
+        # 总睡眠时间 = 总记录时间 - 清醒时间
+        total_sleep_time = total_minutes - (stage_counts.get('W', 0) * 0.5)
+
+        # 睡眠潜伏期（分钟） - 从开始记录到第一个非清醒阶段的时间
+        non_wake_df = df[df['Stage_Name'] != 'W']
+        sleep_latency = non_wake_df.index.min() * 0.5 if not non_wake_df.empty else total_minutes
+
+        # 睡眠效率 = 总睡眠时间 / 总记录时间 × 100%
+        sleep_efficiency = (total_sleep_time / total_minutes) * 100 if total_minutes > 0 else 0
+
+        # 睡眠质量得分（简单算法）
+        sleep_score = min(100, max(0,
+                                   (sleep_efficiency * 0.4) +
+                                   ((stage_counts.get('N3', 0) + stage_counts.get('REM', 0)) * 0.6) +
+                                   (50 if sleep_latency < 20 else 0)
+                                   ))
+
+        # 计算觉醒次数 - 连续的W阶段被视为一次觉醒
+        awaken_events = 0
+        last_stage = None
+        for stage in df['Stage_Name']:
+            if stage == 'W' and last_stage != 'W':
+                awaken_events += 1
+            last_stage = stage
+
+        # 计算各睡眠阶段占比
+        deep_sleep_percent = (stage_counts.get('N3', 0) / len(df) * 100) if len(df) > 0 else 0
+        light_sleep_percent = (stage_counts.get('N1', 0) + stage_counts.get('N2', 0)) / len(df) * 100 if len(
+            df) > 0 else 0
+        rem_sleep_percent = (stage_counts.get('REM', 0) / len(df) * 100) if len(df) > 0 else 0
+
+        return {
+            'total_minutes': total_minutes,
+            'total_sleep_time': total_sleep_time / 60,  # 转换为小时
+            'sleep_latency': sleep_latency,
+            'sleep_efficiency': sleep_efficiency,
+            'deep_sleep_percent': deep_sleep_percent,
+            'light_sleep_percent': light_sleep_percent,
+            'rem_sleep_percent': rem_sleep_percent,
+            'awakenings': awaken_events,
+            'sleep_score': sleep_score
+        }
     def process_data(self):
         """处理并显示健康检测和脑电检测数据（同时处理两个）"""
         if self.health_data_path:
