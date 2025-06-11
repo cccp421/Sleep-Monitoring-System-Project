@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import os
 import pandas as pd
-import numpy as np
+from PyQt5.QtWidgets import QApplication
 
 
 class SleepAssessmentWindow(QMainWindow):
