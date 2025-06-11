@@ -459,60 +459,173 @@ class SleepAssessmentWindow(QMainWindow):
             traceback.print_exc()
 
     def calculate_sleep_metrics(self, df):
-        """计算睡眠质量指标"""
+        """优化后的睡眠质量指标计算"""
         # 确保睡眠阶段名称列存在
         if 'Stage_Name' not in df.columns:
-            # 如果忘记映射，使用原始值
-            df['Stage_Name'] = df['Sleep_Stage'].astype(str)
+            # 映射睡眠阶段到名称
+            valid_stages = {
+                0: 'W',  # Wakefulness
+                1: 'N1',  # NREM Stage 1
+                2: 'N2',  # NREM Stage 2
+                3: 'N3',  # NREM Stage 3 (Deep Sleep)
+                4: 'REM',  # REM Sleep
+            }
+            df['Stage_Name'] = df['Sleep_Stage'].map(valid_stages).fillna('UNK')
 
-        # 统计各睡眠阶段的数量
-        stage_counts = df['Stage_Name'].value_counts().to_dict()
+        # 过滤掉无效的睡眠阶段 (MOVE和UNK)
+        df = df[df['Stage_Name'].isin(['W', 'N1', 'N2', 'N3', 'REM'])]
 
-        # 总记录时长（分钟）
-        total_minutes = len(df) * 0.5  # 每30秒一条记录
+        if len(df) == 0:
+            return {
+                'error': "文件中未找到有效睡眠阶段数据",
+                'total_minutes': 0,
+                'total_sleep_time': 0,
+                'sleep_latency': 0,
+                'sleep_efficiency': 0,
+                'deep_sleep_percent': 0,
+                'light_sleep_percent': 0,
+                'rem_sleep_percent': 0,
+                'awakenings': 0,
+                'sleep_score': 0
+            }
 
-        # 总睡眠时间 = 总记录时间 - 清醒时间
-        total_sleep_time = total_minutes - (stage_counts.get('W', 0) * 0.5)
+        # 获取有效睡眠阶段的数量
+        total_epochs = len(df)
 
-        # 睡眠潜伏期（分钟） - 从开始记录到第一个非清醒阶段的时间
-        non_wake_df = df[df['Stage_Name'] != 'W']
-        sleep_latency = non_wake_df.index.min() * 0.5 if not non_wake_df.empty else total_minutes
+        # 1. 睡眠潜伏期（分钟） - 从开始记录到首次连续5分钟非清醒
+        sleep_latency = self.calculate_sleep_latency(df)
 
-        # 睡眠效率 = 总睡眠时间 / 总记录时间 × 100%
-        sleep_efficiency = (total_sleep_time / total_minutes) * 100 if total_minutes > 0 else 0
+        # 2. 总睡眠时间
+        sleep_data = df[df['Stage_Name'] != 'W']
+        sleep_minutes = len(sleep_data) * 0.5
 
-        # 睡眠质量得分（简单算法）
-        sleep_score = min(100, max(0,
-                                   (sleep_efficiency * 0.4) +
-                                   ((stage_counts.get('N3', 0) + stage_counts.get('REM', 0)) * 0.6) +
-                                   (50 if sleep_latency < 20 else 0)
-                                   ))
+        # 3. 睡眠效率
+        total_minutes = total_epochs * 0.5
+        sleep_efficiency = (sleep_minutes / total_minutes) * 100 if total_minutes > 0 else 0
 
-        # 计算觉醒次数 - 连续的W阶段被视为一次觉醒
-        awaken_events = 0
-        last_stage = None
-        for stage in df['Stage_Name']:
-            if stage == 'W' and last_stage != 'W':
-                awaken_events += 1
-            last_stage = stage
+        # 4. 各阶段睡眠时长占比（基于实际时间，非数量）
+        stage_minutes = {
+            'W': len(df[df['Stage_Name'] == 'W']) * 0.5,
+            'N1': len(df[df['Stage_Name'] == 'N1']) * 0.5,
+            'N2': len(df[df['Stage_Name'] == 'N2']) * 0.5,
+            'N3': len(df[df['Stage_Name'] == 'N3']) * 0.5,
+            'REM': len(df[df['Stage_Name'] == 'REM']) * 0.5
+        }
 
-        # 计算各睡眠阶段占比
-        deep_sleep_percent = (stage_counts.get('N3', 0) / len(df) * 100) if len(df) > 0 else 0
-        light_sleep_percent = (stage_counts.get('N1', 0) + stage_counts.get('N2', 0)) / len(df) * 100 if len(
-            df) > 0 else 0
-        rem_sleep_percent = (stage_counts.get('REM', 0) / len(df) * 100) if len(df) > 0 else 0
+        # 5. 觉醒次数 - 连续清醒时间超过5分钟
+        awaken_events = self.calculate_awakenings(df)
+
+        # 6. 睡眠质量得分（改进的评分系统）
+        sleep_score = self.calculate_sleep_score(
+            sleep_efficiency,
+            stage_minutes['N3'],
+            stage_minutes['REM'],
+            sleep_latency,
+            awaken_events,
+            total_minutes
+        )
 
         return {
             'total_minutes': total_minutes,
-            'total_sleep_time': total_sleep_time / 60,  # 转换为小时
+            'total_sleep_time': sleep_minutes / 60,  # 转换为小时
             'sleep_latency': sleep_latency,
             'sleep_efficiency': sleep_efficiency,
-            'deep_sleep_percent': deep_sleep_percent,
-            'light_sleep_percent': light_sleep_percent,
-            'rem_sleep_percent': rem_sleep_percent,
+            'deep_sleep_percent': (stage_minutes['N3'] / sleep_minutes * 100) if sleep_minutes > 0 else 0,
+            'light_sleep_percent': (
+                        (stage_minutes['N1'] + stage_minutes['N2']) / sleep_minutes * 100) if sleep_minutes > 0 else 0,
+            'rem_sleep_percent': (stage_minutes['REM'] / sleep_minutes * 100) if sleep_minutes > 0 else 0,
             'awakenings': awaken_events,
             'sleep_score': sleep_score
         }
+
+    def calculate_sleep_latency(self, df):
+        """计算睡眠潜伏期（首次连续5分钟非清醒的时间点）"""
+        consecutive_sleep = 0
+        latency = 0
+
+        for i, row in df.iterrows():
+            latency += 0.5  # 每个epoch是30秒，即0.5分钟
+
+            if row['Stage_Name'] != 'W':
+                consecutive_sleep += 0.5
+            else:
+                consecutive_sleep = 0
+
+            # 如果连续5分钟非清醒，视为入睡
+            if consecutive_sleep >= 5.0:
+                return latency - 5.0  # 减去连续时长得到开始时间
+
+        # 如果没有达到连续睡眠，返回总时长
+        return latency
+
+    def calculate_awakenings(self, df):
+        """计算觉醒次数 - 连续清醒时间超过5分钟"""
+        awaken_events = 0
+        in_wake_period = False
+        consecutive_wake = 0
+
+        for row in df['Stage_Name']:
+            if row == 'W':
+                consecutive_wake += 0.5
+                if not in_wake_period and consecutive_wake >= 5:  # 连续清醒5分钟才算一次觉醒
+                    awaken_events += 1
+                    in_wake_period = True
+            else:
+                consecutive_wake = 0
+                in_wake_period = False
+
+        return awaken_events
+
+    def calculate_sleep_score(self, efficiency, deep_minutes, rem_minutes, latency, awakenings, total_minutes):
+        """基于多因素计算睡眠质量得分（0-100）"""
+        # 各因素的权重
+        efficiency_weight = 0.35
+        deep_weight = 0.25
+        rem_weight = 0.15
+        latency_weight = 0.15
+        awakening_weight = 0.10
+
+        # 计算各因素得分
+        efficiency_score = min(100, max(0, efficiency)) * efficiency_weight
+
+        # 深睡得分（理想占比15-25%）
+        deep_percent = deep_minutes / total_minutes * 100
+        deep_score = min(100, max(0, deep_percent * 4)) * deep_weight  # 25%为满分100
+
+        # REM睡眠得分（理想占比20-25%）
+        rem_percent = rem_minutes / total_minutes * 100
+        rem_score = min(100, max(0, rem_percent * 4)) * rem_weight  # 25%为满分100
+
+        # 睡眠潜伏期得分（理想时间10-20分钟）
+        if latency <= 10:
+            latency_score = 100
+        elif latency <= 30:
+            latency_score = 100 - (latency - 10) * 4  # 每超过1分钟扣4分
+        else:
+            latency_score = 20
+        latency_score *= latency_weight
+
+        # 觉醒次数得分
+        if awakenings == 0:
+            awakening_score = 100
+        elif awakenings <= 2:
+            awakening_score = 80
+        elif awakenings <= 4:
+            awakening_score = 60
+        else:
+            awakening_score = 30
+        awakening_score *= awakening_weight
+
+        # 最终得分
+        total_score = efficiency_score + deep_score + rem_score + latency_score + awakening_score
+
+        # 根据总睡眠时间调整
+        if total_minutes < 240:  # 少于4小时睡眠
+            total_score *= 0.8
+
+        return min(100, max(0, total_score))
+
+
     def process_data(self):
         """处理并显示健康检测和脑电检测数据（同时处理两个）"""
         if self.health_data_path:
