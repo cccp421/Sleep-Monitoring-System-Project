@@ -1,70 +1,11 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QGridLayout,
-                             QFrame, QPushButton, QFileDialog, QHBoxLayout, QLineEdit, QDialog)
+                             QFrame, QPushButton, QFileDialog, QHBoxLayout, QLineEdit)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import os
 import pandas as pd
 from PyQt5.QtWidgets import QApplication
-
-class AssessmentResultWindow(QDialog):
-    def __init__(self, sleep_metrics, health_metrics, health_ranges, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("睡眠质量评估报告")
-        self.setGeometry(400, 300, 600, 500)
-
-        layout = QVBoxLayout(self)
-
-        # Title
-        title_label = QLabel("睡眠质量评估报告")
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setFont(QFont("Microsoft YaHei", 16, QFont.Bold))
-        layout.addWidget(title_label)
-
-        # Sleep Metrics Section
-        sleep_section = QFrame()
-        sleep_layout = QVBoxLayout(sleep_section)
-        sleep_layout.addWidget(QLabel("<b>评估指标</b>"))
-        for key, value in sleep_metrics.items():
-            if key in ["sleep_duration", "deep_sleep", "light_sleep", "rem_sleep",
-                       "sleep_latency", "awakenings", "sleep_efficiency", "sleep_score"]:
-                label = QLabel(f"{key.replace('_', ' ').title()}: {value}")
-                sleep_layout.addWidget(label)
-        layout.addWidget(sleep_section)
-
-        # Health Metrics Section
-        health_section = QFrame()
-        health_layout = QVBoxLayout(health_section)
-        health_layout.addWidget(QLabel("<b>健康监测指标</b>"))
-        for key, value in health_metrics.items():
-            min_val, max_val, unit = health_ranges.get(key, (0, 0, ""))
-            value_str = f"{value:.1f}" if isinstance(value, float) else str(value)
-            label_text = f"{key.replace('_', ' ').title()}: {value_str} {unit} [正常范围: {min_val}-{max_val}]"
-            label = QLabel(label_text)
-            if not (min_val <= value <= max_val):
-                label.setStyleSheet("color: red;")
-            health_layout.addWidget(label)
-        layout.addWidget(health_section)
-
-        # Suggestions Section
-        suggestions_section = QFrame()
-        suggestions_layout = QVBoxLayout(suggestions_section)
-        suggestions_layout.addWidget(QLabel("<b>睡眠评估建议</b>"))
-        suggestions_text = self.generate_suggestions(sleep_metrics, health_metrics)
-        suggestions_label = QLabel(suggestions_text)
-        suggestions_label.setWordWrap(True)
-        suggestions_layout.addWidget(suggestions_label)
-        layout.addWidget(suggestions_section)
-
-    def generate_suggestions(self, sleep_metrics, health_metrics):
-        suggestions = []
-        sleep_score = float(sleep_metrics["sleep_score"].split('/')[0])
-        if sleep_score < 60:
-            suggestions.append("您的睡眠质量较低，建议改善睡眠环境，保持规律作息。")
-        if health_metrics["heart_rate"] > 100:
-            suggestions.append("您的心率偏高，建议咨询医生。")
-        if not suggestions:
-            suggestions.append("您的睡眠和健康指标正常，请继续保持。")
-        return "\n".join(suggestions)
+from assessment_result import AssessmentResultWindow  # 导入评估结果窗口
 
 class SleepAssessmentWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -372,14 +313,14 @@ class SleepAssessmentWindow(QMainWindow):
                 raise ValueError(f"未找到有效睡眠阶段数据。文件中的睡眠阶段值为: {unique_stages}")
             metrics = self.calculate_sleep_metrics(eeg_df)
             self.report_data = {
-                "sleep_duration": f"{metrics['total_sleep_time']:.1f}小时",
-                "deep_sleep": f"{metrics['deep_sleep_percent']:.1f}%",
-                "light_sleep": f"{metrics['light_sleep_percent']:.1f}%",
-                "rem_sleep": f"{metrics['rem_sleep_percent']:.1f}%",
-                "sleep_latency": f"{metrics['sleep_latency']:.1f}分钟",
-                "awakenings": f"{metrics['awakenings']}次",
-                "sleep_efficiency": f"{metrics['sleep_efficiency']:.1f}%",
-                "sleep_score": f"{metrics['sleep_score']:.0f}/100",
+                "sleep_duration": metrics['total_sleep_time'],
+                "deep_sleep": metrics['deep_sleep_percent'],
+                "light_sleep": metrics['light_sleep_percent'],
+                "rem_sleep": metrics['rem_sleep_percent'],
+                "sleep_latency": metrics['sleep_latency'],
+                "awakenings": metrics['awakenings'],
+                "sleep_efficiency": metrics['sleep_efficiency'],
+                "sleep_score": metrics['sleep_score'],
                 "user_info": f"数据文件: {eeg_file} | 有效记录数: {len(eeg_df)}",
                 "records_count": f"{len(eeg_df)}条有效记录"
             }
@@ -512,14 +453,36 @@ class SleepAssessmentWindow(QMainWindow):
     def update_data_display(self):
         if not self.report_data:
             return
-        self.metric_labels["sleep_duration"].setText(self.report_data["sleep_duration"])
-        self.metric_labels["deep_sleep"].setText(self.report_data["deep_sleep"])
-        self.metric_labels["light_sleep"].setText(self.report_data["light_sleep"])
-        self.metric_labels["rem_sleep"].setText(self.report_data["rem_sleep"])
-        self.metric_labels["sleep_latency"].setText(self.report_data["sleep_latency"])
-        self.metric_labels["awakenings"].setText(self.report_data["awakenings"])
-        self.metric_labels["sleep_efficiency"].setText(self.report_data["sleep_efficiency"])
-        self.metric_labels["sleep_score"].setText(self.report_data["sleep_score"])
+
+        # 定义睡眠指标的单位
+        sleep_units = {
+            "sleep_duration": "小时",
+            "deep_sleep": "%",
+            "light_sleep": "%",
+            "rem_sleep": "%",
+            "sleep_latency": "分钟",
+            "awakenings": "次",
+            "sleep_efficiency": "%",
+            "sleep_score": "/100"
+        }
+
+        # 格式化并设置每个指标的值
+        for key, label in self.metric_labels.items():
+            value = self.report_data.get(key)
+            if value is not None:
+                # 根据不同数据类型进行格式化
+                if key == "sleep_score":
+                    formatted_value = f"{value:.0f}{sleep_units.get(key, '')}"
+                elif key == "sleep_latency":
+                    formatted_value = f"{value:.1f}{sleep_units.get(key, '')}"
+                elif key == "awakenings":
+                    formatted_value = f"{int(value)}{sleep_units.get(key, '')}"
+                else:
+                    formatted_value = f"{value:.1f}{sleep_units.get(key, '')}"
+
+                label.setText(formatted_value)
+
+        # 特殊格式化和样式
         self.metric_labels["sleep_efficiency"].setStyleSheet("color: #27AE60; font-weight: bold;")
         self.metric_labels["sleep_score"].setStyleSheet("color: #2980B9; font-weight: bold;")
 
@@ -545,7 +508,7 @@ class SleepAssessmentWindow(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(self, "保存报告", "", "PDF文件 (*.pdf);;文本文件 (*.txt)")
         if file_path:
             try:
-                self.status_label.setText(f"报告已成功导出到: {file_path}")
+                self.status_label.setText(f"报告已成功导出到: {文件路径}")
             except Exception as e:
                 self.status_label.setText(f"导出报告失败: {str(e)}")
 
