@@ -6,6 +6,8 @@ import os
 import pandas as pd
 from PyQt5.QtWidgets import QApplication
 from assessment_result import AssessmentResultWindow  # 导入评估结果窗口
+from pdf_report_generator import PDFReportGenerator
+from datetime import datetime
 
 class SleepAssessmentWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -59,10 +61,19 @@ class SleepAssessmentWindow(QMainWindow):
             "健康检测数据:", "health_data_*.csv", "health_data_selected")
         layout.addLayout(health_file_layout)
 
-        self.status_label = QLabel("就绪，请选择数据文件")
-        self.status_label.setFont(QFont("Microsoft YaHei", 9))
-        self.status_label.setStyleSheet("padding: 6px; background-color: #F8F9F9; border: 1px solid #D6DBDF;")
-        layout.addWidget(self.status_label)
+        # 使用 QLineEdit 替代 QLabel，实现可滚动显示
+        self.status_edit = QLineEdit("就绪，请选择数据文件")
+        self.status_edit.setReadOnly(True)  # 设置为只读
+        self.status_edit.setFont(QFont("Microsoft YaHei", 9))
+        self.status_edit.setStyleSheet("""
+            padding: 6px;
+            background-color: #F8F9F9;
+            border: 1px solid #D6DBDF;
+            qproperty-frame: false;
+        """)
+        self.status_edit.setFixedWidth(800)  # 设置固定宽度
+        self.status_edit.setFixedHeight(30)   # 设置固定高度
+        layout.addWidget(self.status_edit)
 
         metrics_label = QLabel("<b>评估指标</b>")
         metrics_label.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
@@ -228,12 +239,12 @@ class SleepAssessmentWindow(QMainWindow):
 
     def health_data_selected(self, file_path):
         self.health_data_path = file_path
-        self.status_label.setText(f"已选择健康检测文件: {os.path.basename(file_path)}")
+        self.status_edit.setText(f"已选择健康检测文件: {os.path.basename(file_path)}")
         self.process_health_data()
 
     def eeg_data_selected(self, file_path):
         self.eeg_data_path = file_path
-        self.status_label.setText(f"已选择脑电检测文件: {os.path.basename(file_path)}")
+        self.status_edit.setText(f"已选择脑电检测文件: {os.path.basename(file_path)}")
         self.process_eeg_data()
 
     def filter_abnormal_data(self, df, column, min_val=0, max_val=None):
@@ -244,7 +255,7 @@ class SleepAssessmentWindow(QMainWindow):
 
     def process_health_data(self):
         if not self.health_data_path:
-            self.status_label.setText("请选择健康检测数据文件")
+            self.status_edit.setText("请选择健康检测数据文件")
             return
         try:
             health_df = pd.read_csv(self.health_data_path)
@@ -285,19 +296,19 @@ class SleepAssessmentWindow(QMainWindow):
                 "fatigue": fatigue_avg
             }
             self.update_health_metrics(self.health_metrics)
-            self.status_label.setText(f"健康数据已处理: {os.path.basename(self.health_data_path)}")
+            self.status_edit.setText(f"健康数据已处理: {os.path.basename(self.health_data_path)}")
         except Exception as e:
-            self.status_label.setText(f"健康数据处理错误: {str(e)}")
+            self.status_edit.setText(f"健康数据处理错误: {str(e)}")
             import traceback
             traceback.print_exc()
 
     def process_eeg_data(self):
         if not self.eeg_data_path:
-            self.status_label.setText("请选择脑电检测数据文件")
+            self.status_edit.setText("请选择脑电检测数据文件")
             return
         try:
             self.report_data = None
-            self.status_label.setText("正在处理脑电数据...")
+            self.status_edit.setText("正在处理脑电数据...")
             QApplication.processEvents()
             eeg_file = os.path.basename(self.eeg_data_path)
             eeg_df = pd.read_csv(self.eeg_data_path)
@@ -325,10 +336,10 @@ class SleepAssessmentWindow(QMainWindow):
                 "records_count": f"{len(eeg_df)}条有效记录"
             }
             self.update_data_display()
-            self.status_label.setText(f"成功处理脑电数据: {os.path.basename(self.eeg_data_path)}")
+            self.status_edit.setText(f"成功处理脑电数据: {os.path.basename(self.eeg_data_path)}")
         except Exception as e:
             error_msg = f"脑电数据处理错误: {str(e)}"
-            self.status_label.setText(error_msg)
+            self.status_edit.setText(error_msg)
             print(error_msg)
             import traceback
             traceback.print_exc()
@@ -448,7 +459,7 @@ class SleepAssessmentWindow(QMainWindow):
             result_window = AssessmentResultWindow(self.report_data, self.health_metrics, self.health_ranges, self)
             result_window.exec_()
         else:
-            self.status_label.setText("数据处理失败，无法显示评估结果")
+            self.status_edit.setText("数据处理失败，无法显示评估结果")
 
     def update_data_display(self):
         if not self.report_data:
@@ -503,14 +514,37 @@ class SleepAssessmentWindow(QMainWindow):
 
     def export_report(self):
         if not self.report_data:
-            self.status_label.setText("请先处理数据后再导出报告")
+            self.status_edit.setText("Please process the data first to generate a report.")
             return
-        file_path, _ = QFileDialog.getSaveFileName(self, "保存报告", "", "PDF文件 (*.pdf);;文本文件 (*.txt)")
-        if file_path:
-            try:
-                self.status_label.setText(f"报告已成功导出到: {文件路径}")
-            except Exception as e:
-                self.status_label.setText(f"导出报告失败: {str(e)}")
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Report",
+            f"Sleep_Quality_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            "PDF Files (*.pdf)"
+        )
+
+        if not file_path:
+            return  # 用户取消操作
+
+        # 确保健康指标存在，如果不存在则设为空字典
+        health_metrics = self.health_metrics if self.health_metrics else {}
+
+        try:
+            # 创建报告生成器
+            report_generator = PDFReportGenerator(self.report_data, health_metrics, self.health_ranges)
+
+            # 生成报告
+            success, message = report_generator.generate_report(file_path)
+
+            if success:
+                self.status_edit.setText(message)
+            else:
+                self.status_edit.setText(message)
+        except Exception as e:
+            self.status_edit.setText(f"Report generation failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def closeEvent(self, event):
         super().closeEvent(event)
