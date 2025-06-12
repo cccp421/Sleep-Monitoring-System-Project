@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import tempfile
 import os
-
+import matplotlib.gridspec as gridspec
 
 class PDFReportGenerator:
     def __init__(self, report_data, health_metrics, health_ranges, eeg_data_path):
@@ -259,55 +259,60 @@ class PDFReportGenerator:
             pdf.cell(40, 8, status, border=1, fill=1, ln=True)
 
     def add_sleep_stage_plots(self, pdf):
-        """Add sleep stage plots - now only pie chart and hypnogram"""
+        """Add sleep stage plots with legend on pie chart"""
         try:
             # Load EEG data
             df = pd.read_csv(self.eeg_data_path)
 
             # Prepare data
-            stage_mapping = {'W': 0, 'N1': 1, 'N2': 2, 'N3': 3, 'REM': 4, 'MOVE': 5, 'UNK': 6}
+            stage_mapping = {'W': 0, 'N1': 1, 'N2': 2, 'N3': 3, 'REM': 4}
             df['Stage_Numeric'] = df['Stage_Label'].map(stage_mapping)
 
             # Calculate sleep stage distribution
             stage_counts = df['Stage_Label'].value_counts()
             total_epochs = len(df)
 
-            # Create pie chart
-            plt.figure(figsize=(8, 6))  # Adjusted size for single chart
-            self.create_stage_pie_chart(stage_counts, total_epochs)
+            # 创建共享颜色映射的图例元素（使用图片中的颜色）
+            legend_elements = [
+                Patch(facecolor=(0.4, 0.6, 0.8), label="Wake"),  # 浅蓝色 - Wake
+                Patch(facecolor=(0.6, 0.8, 0.9), label="N1"),  # 淡青色 - N1
+                Patch(facecolor=(0.6, 0.8, 0.6), label="N2"),  # 淡绿色 - N2
+                Patch(facecolor=(0.8, 0.5, 0.5), label="N3"),  # 柔红色 - N3
+                Patch(facecolor=(0.8, 0.7, 1.0), label="REM")  # 淡紫色 - REM
+            ]
 
-            # Save as temporary image
-            pie_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
-            plt.savefig(pie_path, dpi=150, bbox_inches='tight')
-            self.temp_images.append(pie_path)
+            # 创建图形布局
+            fig = plt.figure(figsize=(14, 6))
+
+            # 创建GridSpec布局：饼图 | 阶段图 (1:2 比例)
+            gs = gridspec.GridSpec(1, 2, width_ratios=[1, 2])  # 1:2的比例
+
+            # 左: 饼图（包含图例）
+            ax1 = plt.subplot(gs[0])
+            self.create_stage_pie_chart(ax1, stage_counts, total_epochs, legend_elements=legend_elements)
+
+            # 右: 睡眠阶段图
+            ax2 = plt.subplot(gs[1])
+            self.create_sleep_progression_plot(ax2, df, show_legend=False)
+
+            # 整体图表标题
+            plt.suptitle("Sleep Stage Analysis", fontsize=14, fontweight='bold', y=0.98)
+            plt.tight_layout(pad=2.0, rect=[0, 0, 1, 0.95])
+
+            # 保存并添加到PDF...
+            combined_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
+            plt.savefig(combined_path, dpi=150, bbox_inches='tight')
+            self.temp_images.append(combined_path)
             plt.close()
 
-            # Add to PDF
-            pdf.cell(0, 10, "Sleep Stage Distribution", ln=True, align='L')
+            pdf.image(combined_path, x=10, y=None, w=190)
             pdf.ln(5)
-            pdf.image(pie_path, x=30, y=None, w=150)  # Centered pie chart
-            pdf.ln(10)
-
-            # Create sleep stage progression plot
-            plt.figure(figsize=(12, 4))
-            self.create_sleep_progression_plot(df)
-
-            # Save as temporary image
-            prog_path = tempfile.NamedTemporaryFile(suffix='.png', delete=False).name
-            plt.savefig(prog_path, dpi=150, bbox_inches='tight')
-            self.temp_images.append(prog_path)
-            plt.close()
-
-            # Add to PDF
-            pdf.cell(0, 10, "Sleep Stage Progression Over Time", ln=True, align='L')
-            pdf.ln(5)
-            pdf.image(prog_path, x=10, y=None, w=190)
 
         except Exception as e:
             print(f"Sleep stage plot generation failed: {str(e)}")
 
-    def create_stage_pie_chart(self, stage_counts, total_epochs):
-        """Create enhanced sleep stage distribution pie chart"""
+    def create_stage_pie_chart(self, ax, stage_counts, total_epochs, legend_elements=None):
+        """Create pie chart with optimized layout"""
         # 只保留主要睡眠阶段（Wake, N1, N2, N3, REM）
         valid_stages = ['W', 'N1', 'N2', 'N3', 'REM']
         stage_counts = {k: v for k, v in stage_counts.items() if k in valid_stages}
@@ -327,12 +332,14 @@ class PDFReportGenerator:
         colors = [self.stage_colors[stage_nums[stage]] for stage in stages_order]
 
         # 创建饼图（移除阴影效果）
-        wedges = plt.pie(
+        wedges, _ = ax.pie(
             sizes,
             colors=colors,
             startangle=90,
-            shadow=False,  # 移除阴影效果解决重影问题
-        )[0]  # 只获取第一个返回值（楔形对象）
+            shadow=False,
+            # 增加饼图边缘宽度，使饼图更饱满
+            wedgeprops={'edgecolor': 'gray', 'linewidth': 0.5}
+        )
 
         # 计算百分比
         percentages = [100 * size / total_epochs for size in sizes]
@@ -351,32 +358,29 @@ class PDFReportGenerator:
 
             # 添加文本（使用与楔形区对比度高的颜色）
             text_color = 'black' if percentage > 5 else 'white'
-            plt.text(x, y, label,
-                     ha='center', va='center',
-                     fontsize=9, color=text_color,
-                     fontweight='bold')
+            ax.text(x, y, label,
+                    ha='center', va='center',
+                    fontsize=9, color=text_color,
+                    fontweight='bold')
 
-        # 创建清晰的图例（放在图表外面）
-        legend_elements = [
-            Patch(facecolor=colors[0], edgecolor='lightgrey', label="Wake (W)"),
-            Patch(facecolor=colors[1], edgecolor='lightgrey', label="N1 (N1)"),
-            Patch(facecolor=colors[2], edgecolor='lightgrey', label="N2 (N2)"),
-            Patch(facecolor=colors[3], edgecolor='lightgrey', label="N3 (N3)"),
-            Patch(facecolor=colors[4], edgecolor='lightgrey', label="REM (REM)")
-        ]
-
-        plt.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5),
-                   fontsize=9)
+        # 添加图例（放置在饼图内部右侧）
+        if legend_elements:
+            # 调整图例位置在饼图内部右侧，节省空间
+            ax.legend(handles=legend_elements,
+                      loc='center left',
+                      bbox_to_anchor=(1.05, 0.5),  # 放在饼图右侧
+                      frameon=False,
+                      fontsize=10)
 
         # 标题
-        plt.title(f"Sleep Stage Distribution\n(Total Epochs: {total_epochs})",
-                  fontsize=12, fontweight='bold', pad=20)
-        plt.axis('equal')
+        ax.set_title(f"Sleep Stage Distribution\n(Total Epochs: {total_epochs})",
+                     fontsize=12, fontweight='bold', pad=10)
+        ax.axis('equal')
 
-    def create_sleep_progression_plot(self, df):
-        """Create sleep stage progression plot (scatter plot)"""
+    def create_sleep_progression_plot(self, ax, df, show_legend=False):
+        """Create sleep stage progression plot (scatter plot) for subplot"""
         # Set background color
-        plt.gca().set_facecolor((0.98, 0.98, 0.98))  # Very light gray background
+        ax.set_facecolor((0.98, 0.98, 0.98))  # Very light gray background
 
         # Get stage numeric values
         y_target = df['Stage_Numeric'].values
@@ -388,18 +392,18 @@ class PDFReportGenerator:
         point_colors = [self.stage_colors.get(stage, (0.8, 0.8, 0.8)) for stage in y_target]
 
         # Create scatter plot
-        plt.scatter(x_axis, y_target, c=point_colors, s=5, alpha=0.8)
+        ax.scatter(x_axis, y_target, c=point_colors, s=5, alpha=0.8)
 
         # Set axes and labels
-        plt.yticks(list(self.stage_map.keys()), list(self.stage_map.values()))
-        plt.xlabel('Time (Hours)', fontsize=10, color='black')
-        plt.ylabel('Sleep Stage', fontsize=10, color='black')
-        plt.title('Sleep Stage Progression Over Time', fontsize=12, fontweight='bold', color='black')
+        ax.set_yticks(list(self.stage_map.keys()), list(self.stage_map.values()))
+        ax.set_xlabel('Time (Hours)', fontsize=10, color='black')
+        ax.set_ylabel('Sleep Stage', fontsize=10, color='black')
+        ax.set_title('Sleep Stage Progression Over Time', fontsize=12, fontweight='bold', color='black')
 
         # Add grid
-        plt.grid(alpha=0.3, linestyle='--', color='lightgrey')
+        ax.grid(alpha=0.3, linestyle='--', color='lightgrey')
 
-        # Add legend
+        # Add legend (位置调整到右上角，避免与标签重叠)
         legend_elements = [
             Patch(facecolor=self.stage_colors[0], edgecolor='lightgrey', label=self.stage_map[0]),
             Patch(facecolor=self.stage_colors[1], edgecolor='lightgrey', label=self.stage_map[1]),
@@ -407,4 +411,5 @@ class PDFReportGenerator:
             Patch(facecolor=self.stage_colors[3], edgecolor='lightgrey', label=self.stage_map[3]),
             Patch(facecolor=self.stage_colors[4], edgecolor='lightgrey', label=self.stage_map[4])
         ]
-        plt.legend(handles=legend_elements, loc='upper right', fontsize=9)
+        if show_legend:
+            ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
