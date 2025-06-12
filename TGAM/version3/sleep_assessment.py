@@ -514,14 +514,14 @@ class SleepAssessmentWindow(QMainWindow):
 
     def export_report(self):
         if not self.report_data:
-            self.status_edit.setText("Please process the data first to generate a report.")
+            self.status_edit.setText("请先处理数据后再导出报告")  # 这里修改
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Report",
-            f"Sleep_Quality_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-            "PDF Files (*.pdf)"
+            "保存报告",
+            f"睡眠质量评估报告_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            "PDF文件 (*.pdf)"
         )
 
         if not file_path:
@@ -531,18 +531,23 @@ class SleepAssessmentWindow(QMainWindow):
         health_metrics = self.health_metrics if self.health_metrics else {}
 
         try:
-            # 创建报告生成器
-            report_generator = PDFReportGenerator(self.report_data, health_metrics, self.health_ranges)
+            # 创建报告生成器（传递脑电数据文件路径）
+            report_generator = PDFReportGenerator(
+                self.report_data,
+                health_metrics,
+                self.health_ranges,
+                self.eeg_data_path  # 添加脑电数据文件路径
+            )
 
             # 生成报告
             success, message = report_generator.generate_report(file_path)
 
             if success:
-                self.status_edit.setText(message)
+                self.status_edit.setText(message)  # 这里修改
             else:
-                self.status_edit.setText(message)
+                self.status_edit.setText(message)  # 这里修改
         except Exception as e:
-            self.status_edit.setText(f"Report generation failed: {str(e)}")
+            self.status_edit.setText(f"导出报告失败: {str(e)}")  # 这里修改
             import traceback
             traceback.print_exc()
 
