@@ -12,7 +12,7 @@ import time
 class TGAMGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SMS 脑电与健康数据采集系统")
+        self.setWindowTitle("SMS 睡眠监测系统")
         self.setGeometry(100, 100, 1400, 900)  # 增大窗口尺寸以适应新布局
 
         # 初始化UI

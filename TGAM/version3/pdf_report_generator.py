@@ -4,11 +4,10 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 from matplotlib.patches import Patch
 import tempfile
 import os
-import matplotlib.gridspec as gridspec
-
 
 class PDFReportGenerator:
     def __init__(self, report_data, health_metrics, health_ranges, eeg_data_path):
